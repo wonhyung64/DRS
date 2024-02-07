@@ -1,22 +1,35 @@
 #%%
 import os
+import math
 import torch
-import torch.nn as nn
 import numpy as np
+import pandas as pd
+import torch.nn as nn
+
+from model import InvPrefExplicit, _init_eps
+
+
+def mini_batch(batch_size: int, *tensors):
+    if len(tensors) == 1:
+        tensor = tensors[0]
+        for i in range(0, len(tensor), batch_size):
+            yield tensor[i:i + batch_size]
+    else:
+        for i in range(0, len(tensors[0]), batch_size):
+            yield tuple(x[i:i + batch_size] for x in tensors)
 
 
 # %%
-data_dir = "./data/coat"
+data_dir = "/root/won/DRS/data/coat"
 
-os.listdir(f"{data_dir}/user_item_features")
+os.listdir(f"{data_dir}")
+os.listdir(f"{data_dir}/coat/user_item_features")
 
 train = np.genfromtxt(f'{data_dir}/train.ascii', encoding='ascii')
 test = np.genfromtxt(f'{data_dir}/test.ascii', encoding='ascii')
 propensities = np.genfromtxt(f'{data_dir}/propensities.ascii', encoding='ascii')
 user_feat = np.genfromtxt(f'{data_dir}/user_item_features/user_features.ascii', encoding='ascii')
 item_feat = np.genfromtxt(f'{data_dir}/user_item_features/item_features.ascii', encoding='ascii')
-test.shape
-train.shape
 
 with open(f'{data_dir}/user_item_features/user_features_map.txt', "r") as f:
     user_feat_map = f.readlines()
@@ -32,6 +45,7 @@ env_num = 4
 factor_num = 30 #embedding dimesion
 reg_only_embed = True
 reg_env_embed = False
+from model import InvPrefExplicit
 
 batch_size = 1024
 epochs = 1000
@@ -63,28 +77,21 @@ RANDOM_SEED_LIST = [17373331, 17373511, 17373423]
 # RANDOM_SEED_LIST = [17373331]
 # RANDOM_SEED_LIST = [999]
 
-
 model = InvPrefExplicit(
     user_num, item_num, env_num, factor_num, reg_only_embed, reg_env_embed
     )
 
 #%%
-if torch.backends.mps.is_available():
-    device = "mps"
+if torch.cuda.is_available():
+    device = "cuda"
 else:
     device = "cpu"
 
 train_data_path = f"{data_dir}/train.csv"
 test_data_path = f"{data_dir}/test.csv"
 
-import pandas as pd
 train_df: pd.DataFrame = pd.read_csv(train_data_path)  # [0: 100000]
 test_df: pd.DataFrame = pd.read_csv(test_data_path)
-train_df["user_id"].nunique()
-test_df["user_id"].nunique()
-train_df["item_id"].nunique()
-test_df["item_id"].nunique()
-
 
 _train_data: np.array = train_df.values.astype(np.int64)
 _test_data: np.array = test_df.values.astype(np.int64)
@@ -111,7 +118,6 @@ _test_scores_tensor: torch.Tensor = torch.Tensor(_test_scores).to(device)
 
 
 #%%
-model
         # self.evaluator: ImplicitTestManager = evaluator
 envs_num: int = model.env_num
 device
@@ -140,7 +146,6 @@ L2_coe
 L1_coe
 
 epoch_cnt: int = 0
-import math
 batch_num = math.ceil(training_data.shape[0] / batch_size)
 
 each_env_count = dict()
@@ -182,7 +187,7 @@ for (batch_index, (
         batch_users_tensor, batch_items_tensor, batch_scores_tensor, batch_envs_tensor, batch_sample_weights
 )) \
         in enumerate(mini_batch(batch_size, users_tensor,
-                                items_tensor, scores_tensor, envs, sample_weights)):break
+                                items_tensor, scores_tensor, envs, sample_weights)):
 
     if update_alpha:
         p = float(batch_index + (epoch_cnt + 1) * batch_num) / float((epoch_cnt + 1) * batch_num)
@@ -243,26 +248,26 @@ for (batch_index, (
     L2_reg: torch.Tensor = model.get_L2_reg(batch_users_tensor, batch_items_tensor, batch_envs_tensor)
     L1_reg: torch.Tensor = model.get_L1_reg(batch_users_tensor, batch_items_tensor, batch_envs_tensor)
 
-        """
-        loss: torch.Tensor = invariant_loss * self.invariant_coe + env_aware_loss * self.env_aware_coe \
-                             + envs_loss * self.env_coe + L2_reg * self.L2_coe + L1_reg * self.L1_coe
-        """
+    """
+    loss: torch.Tensor = invariant_loss * self.invariant_coe + env_aware_loss * self.env_aware_coe \
+                            + envs_loss * self.env_coe + L2_reg * self.L2_coe + L1_reg * self.L1_coe
+    """
 
-        loss: torch.Tensor = invariant_loss * invariant_coe + env_aware_loss * env_aware_coe \
-                             + envs_loss * env_coe + L2_reg * L2_coe + L1_reg * L1_coe
+    loss: torch.Tensor = invariant_loss * invariant_coe + env_aware_loss * env_aware_coe \
+                            + envs_loss * env_coe + L2_reg * L2_coe + L1_reg * L1_coe
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
 
-        loss_dict: dict = {
-            'invariant_loss': float(invariant_loss),
-            'env_aware_loss': float(env_aware_loss),
-            'envs_loss': float(envs_loss),
-            'L2_reg': float(L2_reg),
-            'L1_reg': float(L1_reg),
-            'loss': float(loss),
-        }
+    loss_dict: dict = {
+        'invariant_loss': float(invariant_loss),
+        'env_aware_loss': float(env_aware_loss),
+        'envs_loss': float(envs_loss),
+        'L2_reg': float(L2_reg),
+        'L1_reg': float(L1_reg),
+        'loss': float(loss),
+    }
 
 
 ######
@@ -272,11 +277,3 @@ mean_loss_dict: dict = merge_dict(loss_dicts_list, _mean_merge_dict_func)
 
 
 #%%
-def mini_batch(batch_size: int, *tensors):
-    if len(tensors) == 1:
-        tensor = tensors[0]
-        for i in range(0, len(tensor), batch_size):
-            yield tensor[i:i + batch_size]
-    else:
-        for i in range(0, len(tensors[0]), batch_size):
-            yield tuple(x[i:i + batch_size] for x in tensors)
