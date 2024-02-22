@@ -161,6 +161,7 @@ if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
+device = "mps"
 
 # MODEL_CONFIG
 env_num = 2
@@ -249,7 +250,7 @@ os.makedirs(f"{save_dir}", exist_ok=True)
 
 
 #%% DataLoader
-dataset_path = "/root/won/DRS/data/yahoo_r3/implicit"
+dataset_path = "/Users/wonhyung64/Github/DRS/data/yahoo_r3/implicit"
 train_data_path: str = dataset_path + '/train.csv'
 test_data_path: str = dataset_path + '/test.csv'
 
@@ -476,3 +477,4 @@ for epoch_cnt in range(epochs):
         envs_tmp = envs_tmp.to("cpu").numpy()
         np.save(f"{save_dir}/env_epoch_{epoch_cnt+1}.npy", envs_tmp, allow_pickle=True)
         
+# %%

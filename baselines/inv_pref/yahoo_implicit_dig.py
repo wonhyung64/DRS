@@ -226,13 +226,13 @@ def merge_dict(dict_list: list, user_num: int):
 
 
 #%%
-expt_dir = "/root/won/DRS/baselines/inv_pref/weights/expt_240207_124338_477828"
+expt_dir = "/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240222_210936_733741"
 
 if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
-
+device = "mps"
 # MODEL_CONFIG
 env_num = 2
 factor_num = 40
@@ -256,15 +256,16 @@ cluster_use_random_sort: bool = False # org True
 
 
 #%% DataLoader
-dataset_path = "/root/won/DRS/data/yahoo_r3/implicit"
-train_data_path: str = dataset_path + '/train.csv'
-test_data_path: str = dataset_path + '/test.csv'
+dataset_path = "/Users/wonhyung64/Github/DRS/data/yahoo_r3/implicit"
 
+train_data_path: str = f"{dataset_path}/train.csv"
 train_df: pd.DataFrame = pd.read_csv(train_data_path)  # [0: 100000]
-test_df: pd.DataFrame = pd.read_csv(test_data_path)
-
 _train_data: np.array = train_df.values.astype(np.int64)
+
+test_data_path: str = f"{dataset_path}/test.csv"
+test_df: pd.DataFrame = pd.read_csv(test_data_path)
 _test_data: np.array = test_df.values.astype(np.int64)
+
 
 user_positive_interaction = []
 user_list: list = []
@@ -332,7 +333,7 @@ use_item_pool: bool = True
 
 
 #%%
-weight_dir = f"/root/won/DRS/baselines/inv_pref/weights/expt_240208_005809_494734/epoch_1000.pt"
+weight_dir = f"/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240222_210936_733741/epoch_1000.pt"
 
 model = InvPrefImplicit(
     user_num=user_num,
@@ -445,6 +446,8 @@ users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
 items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
 
 variant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
+
+#%%
 
 
         users_embed_invariant: torch.Tensor = model.embed_user_invariant(batch_users_tensor)
