@@ -137,29 +137,19 @@ def cluster(
             # print('distances reshape:', distances)
             distances_list.append(distances)
 
-        # [samples_num, envs_num]
         each_envs_distances: torch.Tensor = torch.cat(distances_list, dim=1)
-        # print('each_envs_distances:', each_envs_distances)
-        # [samples_num]
+
         if cluster_use_random_sort:
             sort_random_index: np.array = \
                 np.random.randint(1, eps_random_tensor.shape[0], each_envs_distances.shape[1])
             random_eps: torch.Tensor = eps_random_tensor[sort_random_index]
             each_envs_distances = each_envs_distances + random_eps
               
-        # print('pes_each_envs_distances:', each_envs_distances)
-        # print('random_eps:', random_eps)
         new_envs: torch.Tensor = torch.argmin(each_envs_distances, dim=1)
-        # print('new_envs:', new_envs)
-
-
-        # print(new_env_tensor.shape)
 
         new_env_tensors_list.append(new_envs)
 
     all_new_env_tensors: torch.Tensor = torch.cat(new_env_tensors_list, dim=0)
-    # print()
-    # print(all_new_env_tensors.shape)
     envs_diff: torch.Tensor = (envs - all_new_env_tensors) != 0
     diff_num: int = int(torch.sum(envs_diff))
 
@@ -208,7 +198,7 @@ DATASET_PATH = '/Yahoo_all_data/'
 METRIC_LIST = ['ndcg', 'recall', 'precision']
 
 # expt config
-random_seed = RANDOM_SEED_LIST[0]
+random_seed = 0
 has_item_pool: bool = False
 cluster_use_random_sort: bool = False # org True
 
@@ -256,25 +246,10 @@ wandb_var = wandb.init(
 wandb.run.name = f"invpref_{expt_num}"
 
 os.makedirs(f"{save_dir}", exist_ok=True)
-#%%
 
-# def main(
-#         device: torch.device,
-#         model_config: dict,
-#         train_config: dict,
-#         evaluate_config: dict,
-#         data_loader: BaseImplicitBCELossDataLoader,
-#         random_seed: int,
-#         silent: bool = False,
-#         auto: bool = False,
-#         query: bool = True,
-# ):
 
 #%% DataLoader
 dataset_path = "/root/won/DRS/data/yahoo_r3/implicit"
-# class YahooImplicitBCELossDataLoader(BaseImplicitBCELossDataLoader):
-#     def __init__(self, dataset_path: str, device: torch.device, has_item_pool_file: bool = False):
-#         super(YahooImplicitBCELossDataLoader, self).__init__(dataset_path)
 train_data_path: str = dataset_path + '/train.csv'
 test_data_path: str = dataset_path + '/test.csv'
 
@@ -336,64 +311,6 @@ test_users_tensor: torch.LongTensor = torch.LongTensor(test_user_list)
 test_users_tensor = test_users_tensor.to(device)
 sorted_ground_truth: list = [ground_truth[user_id] for user_id in test_user_list]
 
-    # def user_mask_items(self, user_id: int) -> set:
-    #     return self.user_positive_interaction[user_id]
-
-    # def user_highlight_items(self, user_id: int) -> set:
-    #     if not self.has_item_pool:
-    #         raise NotImplementedError('Not has item pool!')
-    #     return self.item_pool[user_id]
-
-    # @property
-    # def all_test_users_by_sorted_tensor(self) -> torch.Tensor:
-    #     """
-    #     注意，这个tensor没有指明device
-    #     :return:
-    #     """
-    #     return self.test_users_tensor
-
-    # @property
-    # def all_test_users_by_sorted_list(self) -> list:
-    #     return self.test_user_list
-
-    # def get_user_ground_truth(self, user_id: int) -> set:
-    #     return self.ground_truth[user_id]
-
-    # @property
-    # def get_sorted_all_test_users_ground_truth(self) -> list:
-    #     return self.sorted_ground_truth
-
-    # @property
-    # def train_data_len(self) -> int:
-    #     return self.train_df.shape[0]
-
-    # @property
-    # def test_data_len(self) -> int:
-    #     return self.test_df.shape[0]
-
-    # @property
-    # def user_num(self) -> int:
-    #     return self._user_num
-
-    # @property
-    # def item_num(self) -> int:
-    #     return self._item_num
-
-    # @property
-    # def test_data_df(self) -> pd.DataFrame:
-    #     return self.test_df
-
-    # @property
-    # def train_data_df(self) -> pd.DataFrame:
-    #     return self.train_df
-
-    # @property
-    # def test_data_np(self) -> np.array:
-    #     return self._test_data
-
-    # @property
-    # def train_data_np(self) -> np.array:
-    #     return self._train_data
 
 #%%
 torch.manual_seed(random_seed)
@@ -411,42 +328,15 @@ model = InvPrefImplicit(
 )
 model = model.to(device)
 
-    # evaluator: ImplicitTestManager = ImplicitTestManager(
-    #     model=model,
-    #     data_loader=data_loader,
-    #     test_batch_size=evaluate_config['test_batch_size'],
-    #     top_k_list=evaluate_config['top_k_list'],
-    #     use_item_pool=True
-    # )
-
 train_tensor: torch.LongTensor = torch.LongTensor(_train_data).to(device)
 
-# print(train_tensor.shape)
 assert train_tensor.shape[1] == 3
 
-#%% TRAIN INIT
-# train_manager: ImplicitTrainManager = ImplicitTrainManager(
-#     model=model, evaluator=evaluator, training_data=train_tensor,
-#     device=device,
-#     batch_size=train_config['batch_size'], epochs=train_config['epochs'],
-#     cluster_interval=train_config['cluster_interval'],
-#     evaluate_interval=train_config['evaluate_interval'],
-#     lr=train_config['lr'], invariant_coe=train_config['invariant_coe'],
-#     env_aware_coe=train_config['env_aware_coe'], env_coe=train_config['env_coe'],
-#     L2_coe=train_config['L2_coe'], L1_coe=train_config['L1_coe'], alpha=train_config['alpha'],
-#     use_class_re_weight=train_config['use_class_re_weight'],
-#     test_begin_epoch=train_config['test_begin_epoch'], begin_cluster_epoch=train_config['begin_cluster_epoch'],
-#     stop_cluster_epoch=train_config['stop_cluster_epoch'],
-#     use_recommend_re_weight=train_config['use_recommend_re_weight']
-# )
-
-# self.evaluator: ImplicitTestManager = evaluator
 envs_num: int = model.env_num
 users_tensor: torch.Tensor = train_tensor[:, 0]
 items_tensor: torch.Tensor = train_tensor[:, 1]
 scores_tensor: torch.Tensor = train_tensor[:, 2].float()
 envs: torch.LongTensor = torch.LongTensor(np.random.randint(0, envs_num, _train_data.shape[0]))
-# self.envs: torch.LongTensor = torch.LongTensor(np.random.randint(0, 1, training_data.shape[0]))
 envs = envs.to(device)
 optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=lr)
 recommend_loss_type = nn.BCELoss
@@ -479,13 +369,6 @@ for env in range(envs_num):
 
 
 #%% TRAIN START
-# train_tuple, test_tuple, cluster_tuple = train_manager.train(silent=False, auto=False)
-# silent=False
-# auto=False
-
-test_result_list: list = []
-test_epoch_list: list = []
-
 cluster_diff_num_list: list = []
 cluster_epoch_list: list = []
 envs_cnt_list: list = []
@@ -493,20 +376,10 @@ envs_cnt_list: list = []
 loss_result_list: list = []
 train_epoch_index_list: list = []
 
-# temp_eval_result: dict = evaluator.evaluate()
-# test_result_list.append(temp_eval_result)
-# test_epoch_list.append(self.epoch_cnt)
-
 class_weights, sample_weights, result = stat_envs(envs, envs_num, scores_tensor)
-
-
-# if not silent and not auto:
-#     print('test at epoch:', epoch_cnt)
-#     print(transfer_loss_dict_to_line_str(temp_eval_result))
 
 for epoch_cnt in range(epochs):
     print(f"Epoch: {epoch_cnt}")
-    # temp_loss_dict = train_a_epoch()
 
     model.train()
     loss_dicts_list: list = []
@@ -524,12 +397,9 @@ for epoch_cnt in range(epochs):
         invariant_score, env_aware_score, env_outputs = model(
             batch_users_tensor, batch_items_tensor, batch_envs_tensor, alpha
         )
-        # print(batch_users_tensor.shape, batch_items_tensor.shape, batch_scores_tensor.shape, batch_envs_tensor.shape)
         assert batch_users_tensor.shape == batch_items_tensor.shape \
                == batch_scores_tensor.shape == batch_envs_tensor.shape
-        # print(batch_users_tensor.shape, invariant_score.shape)
         assert batch_users_tensor.shape == invariant_score.shape
-        # print(invariant_score.shape, env_aware_score.shape, env_outputs.shape)
         assert invariant_score.shape == env_aware_score.shape
         assert env_outputs.shape[0] == env_aware_score.shape[0] and env_outputs.shape[1] == envs_num
 
@@ -546,8 +416,6 @@ for epoch_cnt in range(epochs):
         invariant_loss: torch.Tensor = recommend_loss(invariant_score, batch_scores_tensor)
         env_aware_loss: torch.Tensor = recommend_loss(env_aware_score, batch_scores_tensor)
 
-        # print(invariant_loss, env_aware_loss, batch_sample_weights, sep='\n')
-
         envs_loss: torch.Tensor = env_loss(env_outputs, batch_envs_tensor)
 
         if use_class_re_weight:
@@ -560,10 +428,6 @@ for epoch_cnt in range(epochs):
         L2_reg: torch.Tensor = model.get_L2_reg(batch_users_tensor, batch_items_tensor, batch_envs_tensor)
         L1_reg: torch.Tensor = model.get_L1_reg(batch_users_tensor, batch_items_tensor, batch_envs_tensor)
 
-        """
-        loss: torch.Tensor = invariant_loss * self.invariant_coe + env_aware_loss * self.env_aware_coe \
-                             + envs_loss * self.env_coe + L2_reg * self.L2_coe + L1_reg * self.L1_coe
-        """
 
         loss: torch.Tensor = invariant_loss * invariant_coe + env_aware_loss * env_aware_coe \
                              + envs_loss * env_coe + L2_reg * L2_coe + L1_reg * L1_coe
@@ -581,29 +445,6 @@ for epoch_cnt in range(epochs):
             'loss': float(loss),
         }
         wandb_var.log(loss_dict)
-        # print(loss_dict)
-
-        # loss_dicts_list.append(loss_dict)
-
-    # epoch_cnt += 1
-
-    # mean_loss_dict: dict = merge_dict(loss_dicts_list, _mean_merge_dict_func)
-
-
-    # train_epoch_index_list.append(epoch_cnt)
-    # loss_result_list.append(temp_loss_dict)
-    # if not silent and not auto:
-    #     print('train epoch:', self.epoch_cnt)
-    #     print(transfer_loss_dict_to_line_str(temp_loss_dict))
-
-    # if (epoch_cnt % evaluate_interval) == 0 and epoch_cnt >= test_begin_epoch:
-    #     temp_eval_result: dict = evaluator.evaluate()
-    #     test_result_list.append(temp_eval_result)
-    #     test_epoch_list.append(epoch_cnt)
-
-    #     if not silent and not auto:
-    #         print('test at epoch:', self.epoch_cnt)
-    #         print(transfer_loss_dict_to_line_str(temp_eval_result))
 
     if (epoch_cnt % cluster_interval) == 0:
 
@@ -624,23 +465,9 @@ for epoch_cnt in range(epochs):
                 )
 
             wandb_var.log({"env_diff_num": diff_num})
-            # cluster_diff_num_list.append(diff_num)
-        # else:
-        #     diff_num: int = 0
-        #     cluster_diff_num_list.append(diff_num)
 
-        # envs_cnt: dict = stat_envs()
         class_weights, sample_weights, result = stat_envs(envs, envs_num, scores_tensor)
-
-        # cluster_epoch_list.append(epoch_cnt)
-        # envs_cnt_list.append(envs_cnt)
-
-        # if not silent and not auto:
-        #     print('cluster at epoch:', self.epoch_cnt)
-        #     print('diff num:', diff_num)
-        #     print(transfer_loss_dict_to_line_str(envs_cnt))
 
     if (epoch_cnt+1) % 100 == 0:
         epoch_result_dir = f"{save_dir}/epoch_{epoch_cnt+1}"
-        # os.makedirs(epoch_result_dir, exist_ok=True)
         torch.save(model.state_dict(), f"{save_dir}/epoch_{epoch_cnt+1}.pt")
