@@ -209,19 +209,6 @@ def NDCGatK_r(test_data, r, k):
     return np.sum(ndcg)
 
 
-def merge_dict(dict_list: list, merge_func, **func_args):
-    # assert len(dict_list) > 1, 'len(dict_list) should bigger than 1'
-    first_dict: dict = dict_list[0]
-    keys = first_dict.keys()
-    for element_dict in dict_list:
-        assert keys == element_dict.keys()
-
-    result: dict = dict()
-    for key in keys:
-        elements_list: list = [element_dict[key] for element_dict in dict_list]
-        result[key] = merge_func(elements_list, **func_args)
-
-    return result
 
 def merge_dict(dict_list: list, user_num: int):
     # assert len(dict_list) > 1, 'len(dict_list) should bigger than 1'
@@ -236,7 +223,6 @@ def merge_dict(dict_list: list, user_num: int):
         result[key] = (np.sum(np.array(elements_list), axis=0) / float(user_num)).tolist()
 
     return result
-
 
 
 #%%
@@ -345,37 +331,8 @@ top_k_list.sort(reverse=False)
 use_item_pool: bool = True
 
 
-# %%
-results = {}
-for weight in os.listdir(expt_dir):
-    print(weight)
-
-    weight_dir = f"{expt_dir}/{weight}"
-
-
-    model = InvPrefImplicit(
-        user_num=user_num,
-        item_num=item_num,
-        env_num=env_num,
-        factor_num=factor_num,
-        reg_only_embed=reg_only_embed,
-        reg_env_embed=reg_env_embed
-    )
-
-    model.load_state_dict(torch.load(weight_dir))
-
-    model = model.to(device)
-
-    result = evaluate(model, test_users_tensor, test_user_list, sorted_ground_truth, batch_size, user_positive_interaction, top_k_list, use_item_pool, item_pool)
-    results[weight.split(".")[0]] = result
-
-with open(f'{expt_dir}/result.json', 'w') as f : 
-	json.dump(results, f, indent=4)
-
 #%%
-
 weight_dir = f"/root/won/DRS/baselines/inv_pref/weights/expt_240208_005809_494734/epoch_1000.pt"
-
 
 model = InvPrefImplicit(
     user_num=user_num,
@@ -402,7 +359,6 @@ for (batch_index, (batch_users_tensor, batch_users_list, batch_users_ground_trut
                                 
 
     rating_matrix: torch.Tensor = model.predict(batch_users_tensor)
-
     mask_users, mask_items = [], []
 
     for idx, user_id in enumerate(batch_users_list):
@@ -421,8 +377,13 @@ for (batch_index, (batch_users_tensor, batch_users_list, batch_users_ground_trut
             high_light_items += list(high_light_items_set)
         rating_matrix[high_light_users, high_light_items] += (1 << 10)
                 
+
+            # print(rating_matrix.shape)
     _, predict_items = torch.topk(rating_matrix, k=max(top_k_list))
     predict_items: np.array = predict_items.cpu().numpy()
+    # print(predict_items)
+    # print(type(predict_items))
+    # print(type(predict_items[0]))
     predict_items_list: list = predict_items.tolist()
 
     r = get_label(batch_users_ground_truth, predict_items_list)
@@ -443,15 +404,66 @@ for (batch_index, (batch_users_tensor, batch_users_list, batch_users_ground_trut
 
     result_dicts_list.append(result_dict)
 
+    # print(result_dicts_list)
 result_dict: dict = merge_dict(
     dict_list=result_dicts_list,
     user_num=len(all_test_user_list)
 )
 
 
-# result = evaluate(model, test_users_tensor, test_user_list, sorted_ground_truth, batch_size, user_positive_interaction, top_k_list, use_item_pool, item_pool)
-# results[weight.split(".")[0]] = result
+#%%
+users_embed_gmf: torch.Tensor = model.embed_user_invariant(batch_users_tensor)
+items_embed_gmf: torch.Tensor = model.embed_item_invariant.weight
 
-# with open(f'{expt_dir}/result.json', 'w') as f : 
-# 	json.dump(results, f, indent=4)
+user_to_cat = []
+for i in range(users_embed_gmf.shape[0]):
+    tmp: torch.Tensor = users_embed_gmf[i:i + 1, :]
+    tmp = tmp.repeat(items_embed_gmf.shape[0], 1)
+    user_to_cat.append(tmp)
 
+users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
+items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
+
+invariant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
+invariant_score: torch.Tensor = model.output_func(torch.sum(invariant_preferences, dim=1))
+
+invariant_score = invariant_score.reshape(batch_users_tensor.shape[0], items_embed_gmf.shape[0])
+
+
+#%%
+users_embed_gmf: torch.Tensor = model.embed_user_env_aware(batch_users_tensor)
+items_embed_gmf: torch.Tensor = model.embed_item_env_aware.weight
+
+
+user_to_cat = []
+for i in range(users_embed_gmf.shape[0]):
+    tmp: torch.Tensor = users_embed_gmf[i:i + 1, :]
+    tmp = tmp.repeat(items_embed_gmf.shape[0], 1)
+    user_to_cat.append(tmp)
+
+users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
+items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
+
+variant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
+
+
+        users_embed_invariant: torch.Tensor = model.embed_user_invariant(batch_users_tensor)
+        # items_embed_invariant: torch.Tensor = self.embed_item_invariant(items_id)
+        items_embed_gmf: torch.Tensor = model.embed_item_invariant.weight
+
+        users_embed_env_aware: torch.Tensor = model.embed_user_env_aware(batch_users_tensor)
+        items_embed_env_aware: torch.Tensor = self.embed_item_env_aware(items_id)
+
+        envs_embed: torch.Tensor = self.embed_env(envs_id)
+
+        invariant_preferences: torch.Tensor = users_embed_invariant * items_embed_invariant
+        env_aware_preferences: torch.Tensor = users_embed_env_aware * items_embed_env_aware * envs_embed
+
+        invariant_score: torch.Tensor = self.output_func(torch.sum(invariant_preferences, dim=1))
+        env_aware_mid_score: torch.Tensor = self.output_func(torch.sum(env_aware_preferences, dim=1))
+        env_aware_score: torch.Tensor = invariant_score * env_aware_mid_score
+
+        reverse_invariant_preferences: torch.Tensor = ReverseLayerF.apply(invariant_preferences, alpha)
+        env_outputs: torch.Tensor = self.env_classifier(reverse_invariant_preferences)
+
+        return invariant_score.reshape(-1), env_aware_score.reshape(-1), env_outputs.reshape(-1, self.env_num)

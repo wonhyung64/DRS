@@ -471,3 +471,8 @@ for epoch_cnt in range(epochs):
     if (epoch_cnt+1) % 100 == 0:
         epoch_result_dir = f"{save_dir}/epoch_{epoch_cnt+1}"
         torch.save(model.state_dict(), f"{save_dir}/epoch_{epoch_cnt+1}.pt")
+
+        envs_tmp = deepcopy(envs)
+        envs_tmp = envs_tmp.to("cpu").numpy()
+        np.save(f"{save_dir}/env_epoch_{epoch_cnt+1}.npy", envs_tmp, allow_pickle=True)
+        
