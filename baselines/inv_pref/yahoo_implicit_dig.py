@@ -1,25 +1,13 @@
 #%%
 import os
 import math
-import json
 import torch
 import wandb
 import numpy as np
 import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
-from copy import deepcopy
-from datetime import datetime
-
-from model import InvPrefImplicit, _init_eps
-
-# from dataloader import BaseImplicitBCELossDataLoader, YahooImplicitBCELossDataLoader
-
-# from evaluate import ImplicitTestManager
-# from models import InvPrefImplicit
-# from train import ImplicitTrainManager
-# from utils import draw_score_pic, merge_dict, _show_me_a_list_func, draw_loss_pic_one_by_one, query_user, query_str, \
-#     mkdir, query_int, get_class_name_str, _mean_merge_dict_func, show_me_all_the_fucking_result
+import matplotlib.pyplot as plt
 
 
 def analyse_interaction_from_text(lines: list, has_value: bool = False):
@@ -333,7 +321,8 @@ use_item_pool: bool = True
 
 
 #%%
-weight_dir = f"/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240222_210936_733741/epoch_1000.pt"
+checkpoint_dir = f"/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240222_210936_733741"
+epoch_num = 1000
 
 model = InvPrefImplicit(
     user_num=user_num,
@@ -343,130 +332,85 @@ model = InvPrefImplicit(
     reg_only_embed=reg_only_embed,
     reg_env_embed=reg_env_embed
 )
-
+weight_dir = f"{checkpoint_dir}/epoch_{epoch_num}.pt"
 model.load_state_dict(torch.load(weight_dir))
 
 model = model.to(device)
 
-all_test_user_tensor: torch.Tensor = test_users_tensor
-all_test_user_list: list = test_user_list
-all_test_ground_truth: list = sorted_ground_truth
+train_tensor: torch.LongTensor = torch.LongTensor(_train_data).to(device)
 
-result_dicts_list: list = []
+assert train_tensor.shape[1] == 3
 
-for (batch_index, (batch_users_tensor, batch_users_list, batch_users_ground_truth)) \
-        in enumerate(mini_batch(batch_size, all_test_user_tensor, all_test_user_list,
-                                all_test_ground_truth)):
-                                
+envs_num: int = model.env_num
+users_tensor: torch.Tensor = train_tensor[:, 0]
+items_tensor: torch.Tensor = train_tensor[:, 1]
+scores_tensor: torch.Tensor = train_tensor[:, 2].float()
 
-    rating_matrix: torch.Tensor = model.predict(batch_users_tensor)
-    mask_users, mask_items = [], []
+envs_ = np.load(f"{checkpoint_dir}/env_epoch_{epoch_num}.npy")
+envs: torch.LongTensor = torch.LongTensor(envs_)
+envs = envs.to(device)
+# optimizer: torch.optim.Adam = torch.optim.Adam(model.parameters(), lr=lr)
+# recommend_loss_type = nn.BCELoss
+# cluster_distance_func = nn.BCELoss(reduction='none')
+env_loss_type = nn.NLLLoss
 
-    for idx, user_id in enumerate(batch_users_list):
-        mask_items_set = user_positive_interaction[user_id]
-        mask_users += [idx] * len(mask_items_set)
-        mask_items += list(mask_items_set)
-
-    rating_matrix[mask_users, mask_items] = -(1 << 10)
-
-
-    if use_item_pool:
-        high_light_users, high_light_items = [], []
-        for idx, user_id in enumerate(batch_users_list):
-            high_light_items_set = item_pool[user_id]
-            high_light_users += [idx] * len(high_light_items_set)
-            high_light_items += list(high_light_items_set)
-        rating_matrix[high_light_users, high_light_items] += (1 << 10)
-                
-
-            # print(rating_matrix.shape)
-    _, predict_items = torch.topk(rating_matrix, k=max(top_k_list))
-    predict_items: np.array = predict_items.cpu().numpy()
-    # print(predict_items)
-    # print(type(predict_items))
-    # print(type(predict_items[0]))
-    predict_items_list: list = predict_items.tolist()
-
-    r = get_label(batch_users_ground_truth, predict_items_list)
-
-    pre, recall, ndcg = [], [], []
-    for k in top_k_list:
-        ret = recall_precision_ATk(batch_users_ground_truth, r, k)
-        pre.append(ret['precision'])
-        recall.append(ret['recall'])
-        ret = NDCGatK_r(batch_users_ground_truth, r, k)
-        ndcg.append(ret)
-
-    result_dict: dict = {
-        'ndcg': ndcg,
-        'recall': recall,
-        'precision': pre,
-    }
-
-    result_dicts_list.append(result_dict)
-
-    # print(result_dicts_list)
-result_dict: dict = merge_dict(
-    dict_list=result_dicts_list,
-    user_num=len(all_test_user_list)
-)
-
+batch_num = math.ceil(train_tensor.shape[0] / batch_size)
 
 #%%
-users_embed_gmf: torch.Tensor = model.embed_user_invariant(batch_users_tensor)
-items_embed_gmf: torch.Tensor = model.embed_item_invariant.weight
+inv_prefs = []
+var_prefs = []
+total_loss = []
 
-user_to_cat = []
-for i in range(users_embed_gmf.shape[0]):
-    tmp: torch.Tensor = users_embed_gmf[i:i + 1, :]
-    tmp = tmp.repeat(items_embed_gmf.shape[0], 1)
-    user_to_cat.append(tmp)
+model.eval()
+for (batch_index, (
+        batch_users_tensor, batch_items_tensor, batch_scores_tensor, batch_envs_tensor
+)) \
+        in tqdm(enumerate(mini_batch(batch_size, users_tensor,
+                                items_tensor, scores_tensor, envs))):
 
-users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
-items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
-
-invariant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
-invariant_score: torch.Tensor = model.output_func(torch.sum(invariant_preferences, dim=1))
-
-invariant_score = invariant_score.reshape(batch_users_tensor.shape[0], items_embed_gmf.shape[0])
-
-
-#%%
-users_embed_gmf: torch.Tensor = model.embed_user_env_aware(batch_users_tensor)
-items_embed_gmf: torch.Tensor = model.embed_item_env_aware.weight
-
-
-user_to_cat = []
-for i in range(users_embed_gmf.shape[0]):
-    tmp: torch.Tensor = users_embed_gmf[i:i + 1, :]
-    tmp = tmp.repeat(items_embed_gmf.shape[0], 1)
-    user_to_cat.append(tmp)
-
-users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
-items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
-
-variant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
-
-#%%
-
-
+    with torch.no_grad():
         users_embed_invariant: torch.Tensor = model.embed_user_invariant(batch_users_tensor)
-        # items_embed_invariant: torch.Tensor = self.embed_item_invariant(items_id)
-        items_embed_gmf: torch.Tensor = model.embed_item_invariant.weight
+        items_embed_invariant: torch.Tensor = model.embed_item_invariant(batch_items_tensor)
 
         users_embed_env_aware: torch.Tensor = model.embed_user_env_aware(batch_users_tensor)
-        items_embed_env_aware: torch.Tensor = self.embed_item_env_aware(items_id)
+        items_embed_env_aware: torch.Tensor = model.embed_item_env_aware(batch_items_tensor)
 
-        envs_embed: torch.Tensor = self.embed_env(envs_id)
+        envs_embed: torch.Tensor = model.embed_env(batch_envs_tensor)
 
         invariant_preferences: torch.Tensor = users_embed_invariant * items_embed_invariant
         env_aware_preferences: torch.Tensor = users_embed_env_aware * items_embed_env_aware * envs_embed
 
-        invariant_score: torch.Tensor = self.output_func(torch.sum(invariant_preferences, dim=1))
-        env_aware_mid_score: torch.Tensor = self.output_func(torch.sum(env_aware_preferences, dim=1))
-        env_aware_score: torch.Tensor = invariant_score * env_aware_mid_score
+        env_outputs: torch.Tensor = model.env_classifier(env_aware_preferences)
+        env_outputs = env_outputs.reshape(-1, env_num)
 
-        reverse_invariant_preferences: torch.Tensor = ReverseLayerF.apply(invariant_preferences, alpha)
-        env_outputs: torch.Tensor = self.env_classifier(reverse_invariant_preferences)
+    env_outputs = env_outputs.to("cpu")
+    batch_envs_tensor = batch_envs_tensor.to("cpu")
+    env_loss = nn.NLLLoss(reduction="none")(env_outputs, batch_envs_tensor)
 
-        return invariant_score.reshape(-1), env_aware_score.reshape(-1), env_outputs.reshape(-1, self.env_num)
+    inv_prefs.append(invariant_preferences)
+    var_prefs.append(env_aware_preferences)
+    total_loss.append(env_loss)
+
+inv_prefs = torch.concat(inv_prefs, dim=0).cpu().numpy()
+var_prefs = torch.concat(var_prefs, dim=0).cpu().numpy()
+total_loss = torch.concat(total_loss, dim=0).cpu().numpy()
+
+
+os.makedirs(f"{checkpoint_dir}/inv_prefs", exist_ok=True)
+os.makedirs(f"{checkpoint_dir}/var_prefs", exist_ok=True)
+os.makedirs(f"{checkpoint_dir}/env_loss", exist_ok=True)
+
+np.save(f"{checkpoint_dir}/inv_prefs/e{epoch_num}.npy", inv_prefs, allow_pickle=True)
+np.save(f"{checkpoint_dir}/var_prefs/e{epoch_num}.npy", var_prefs, allow_pickle=True)
+np.save(f"{checkpoint_dir}/env_loss/e{epoch_num}.npy", total_loss, allow_pickle=True)
+
+# %%
+env_losses = []
+for i in range(100, 1100, 100):
+    env_loss = np.load(f"{checkpoint_dir}/env_loss/e{i}.npy")
+    env_losses.append(env_loss.mean())
+
+plt.plot(range(100,1100,100), env_losses)
+plt.xlabel("Epochs")
+plt.ylabel("NLL loss")
+
