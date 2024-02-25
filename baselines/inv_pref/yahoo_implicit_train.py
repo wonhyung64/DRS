@@ -171,7 +171,7 @@ reg_env_embed = False
 
 # TRAIN_CONFIG
 batch_size = 8192
-epochs = 1000
+epochs = 100
 cluster_interval = 5
 evaluate_interval =10
 lr = 0.005
@@ -219,7 +219,7 @@ wandb_var = wandb.init(
         "reg_only_embed" : True,
         "reg_env_embed" : False,
         "batch_size" : 8192,
-        "epochs" : 1000,
+        "epochs" : 100,
         "cluster_interval" : 5,
         "evaluate_interval" : 10,
         "lr" : 0.005,
@@ -469,7 +469,7 @@ for epoch_cnt in range(epochs):
 
         class_weights, sample_weights, result = stat_envs(envs, envs_num, scores_tensor)
 
-    if (epoch_cnt+1) % 100 == 0:
+    if (epoch_cnt+1) % 10 == 0:
         epoch_result_dir = f"{save_dir}/epoch_{epoch_cnt+1}"
         torch.save(model.state_dict(), f"{save_dir}/epoch_{epoch_cnt+1}.pt")
 

@@ -8,6 +8,8 @@ import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from model import InvPrefImplicit
 
 
 def analyse_interaction_from_text(lines: list, has_value: bool = False):
@@ -322,7 +324,8 @@ use_item_pool: bool = True
 
 #%%
 checkpoint_dir = f"/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240222_210936_733741"
-epoch_num = 1000
+checkpoint_dir = f"/Users/wonhyung64/Github/DRS/baselines/inv_pref/weights/expt_240225_171328_916681"
+epoch_num = 10
 
 model = InvPrefImplicit(
     user_num=user_num,
@@ -414,3 +417,33 @@ plt.plot(range(100,1100,100), env_losses)
 plt.xlabel("Epochs")
 plt.ylabel("NLL loss")
 
+
+#%% t-SNE
+epoch_num  = 10
+sample_num = 2000
+colors = ["blue"]*sample_num + ["orange"]*sample_num
+seed = 0
+
+inv_pref = np.load(f"{checkpoint_dir}/inv_prefs/e{epoch_num}.npy")
+var_pref = np.load(f"{checkpoint_dir}/var_prefs/e{epoch_num}.npy")
+
+np.random.seed(seed)
+indices = np.random.choice(inv_prefs.shape[0], sample_num)
+inv_sample = inv_pref[indices]
+var_sample = var_pref[indices]
+
+prefs = np.concatenate([inv_sample, var_sample], axis=0)
+
+model = TSNE(n_components=3)
+reducted_prefs = model.fit_transform(prefs)
+
+
+#%%2d
+plt.scatter(reducted_prefs[:,0], reducted_prefs[:,1], c=colors)
+
+# %%3d
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+
+ax.scatter(reducted_prefs[:,0], reducted_prefs[:,1], reducted_prefs[:,2], c=colors)
+# %%
