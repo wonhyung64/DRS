@@ -379,6 +379,12 @@ train_epoch_index_list: list = []
 
 class_weights, sample_weights, result = stat_envs(envs, envs_num, scores_tensor)
 
+torch.save(model.state_dict(), f"{save_dir}/epoch_0.pt")
+
+envs_tmp = deepcopy(envs)
+envs_tmp = envs_tmp.to("cpu").numpy()
+np.save(f"{save_dir}/env_epoch_0.npy", envs_tmp, allow_pickle=True)
+
 for epoch_cnt in range(epochs):
     print(f"Epoch: {epoch_cnt}")
 
@@ -438,11 +444,11 @@ for epoch_cnt in range(epochs):
         optimizer.step()
 
         loss_dict: dict = {
-            'invariant_loss': float(invariant_loss),
-            'env_aware_loss': float(env_aware_loss),
-            'envs_loss': float(envs_loss),
-            'L2_reg': float(L2_reg),
-            'L1_reg': float(L1_reg),
+            'invariant_loss': float(invariant_loss * invariant_coe),
+            'env_aware_loss': float(env_aware_loss * env_aware_coe),
+            'envs_loss': float(envs_loss * env_coe),
+            'L2_reg': float(L2_reg * L2_coe),
+            'L1_reg': float(L1_reg * L1_coe),
             'loss': float(loss),
         }
         wandb_var.log(loss_dict)
@@ -469,8 +475,8 @@ for epoch_cnt in range(epochs):
 
         class_weights, sample_weights, result = stat_envs(envs, envs_num, scores_tensor)
 
-    if (epoch_cnt+1) % 10 == 0:
-        epoch_result_dir = f"{save_dir}/epoch_{epoch_cnt+1}"
+    # if (epoch_cnt+1) % 1 == 0:
+    if (epoch_cnt+1) in [10, 50, 100]:
         torch.save(model.state_dict(), f"{save_dir}/epoch_{epoch_cnt+1}.pt")
 
         envs_tmp = deepcopy(envs)
