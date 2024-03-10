@@ -111,7 +111,7 @@ train_df = pd.DataFrame(data=x_train, columns=["user", "item"])
 train_popularity = train_df["item"].value_counts().reset_index().sort_values("item")["count"].values
 train_popularity = np.sqrt(train_popularity / train_popularity.max())
 pop_difference = np.abs(train_popularity.repeat((num_items)).reshape(num_items, -1) - train_popularity)
-top_pop_diffs = np.argmax(pop_difference, -1)
+top_pop_diffs = np.argmax(pop_difference, -1)+1
 
 unexposed_dict = {}
 for i in range(1, num_users+1):
@@ -153,8 +153,7 @@ for epoch in range(1, num_epochs+1):break
             augmented_items = torch.tensor(np.stack(unexposed_items_)-1).to(device)
 
         elif sampling == "pop":
-            top_pop_diffs = np.argmax(pop_difference, -1)
-
+            top_pop_diffs
 
         aug_x = torch.cat([sub_x[:, :1], augmented_items], dim=-1)
 
