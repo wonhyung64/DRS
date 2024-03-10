@@ -143,9 +143,9 @@ for epoch in range(1, num_epochs+1):break
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
         # sampling
-        batch_users = x_train[selected_idx, 0].tolist()
 
         if sampling == "cf":
+            batch_users = x_train[selected_idx, 0].tolist()
             unexposed_items_ = []
             for u in batch_users:
                 unexposed_item = np.random.choice(unexposed_dict[u],1)
@@ -153,7 +153,10 @@ for epoch in range(1, num_epochs+1):break
             augmented_items = torch.tensor(np.stack(unexposed_items_)-1).to(device)
 
         elif sampling == "pop":
-            top_pop_diffs
+            batch_items = x_train[selected_idx, 1].tolist()
+            popularity_items_ = [top_pop_diffs[u-1] for u in batch_items]
+            augmented_items = torch.tensor(popularity_items_) - 1
+            augmented_items = augmented_items.unsqueeze(-1).to(device)
 
         aug_x = torch.cat([sub_x[:, :1], augmented_items], dim=-1)
 
