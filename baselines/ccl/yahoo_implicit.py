@@ -128,13 +128,13 @@ loss_fcn = torch.nn.BCELoss()
 
 
 #%% TRAIN
-for epoch in range(1, num_epochs+1):break
+for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
     epoch_loss = 0
     model.train()
 
-    for idx in range(total_batch):break
+    for idx in range(total_batch):
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
