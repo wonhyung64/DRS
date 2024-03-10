@@ -1,8 +1,9 @@
 #%%
 import os
+import wandb
 import torch
 import numpy as np
-import wandb
+import pandas as pd
 from datetime import datetime
 
 from model import NCF
@@ -14,10 +15,11 @@ from utils import binarize, shuffle
 embedding_sizes = [4, 8, 16, 32, 64]
 hidden_layers_num = [1, 2, 3]
 batch_sizes = [512, 1024, 2048, 4096]
-# balance_params = [0.5, 1.5]
-# temperatures = [0.1, 1.5]
+balance_params = [0.5, 1.5]
+temperatures = [0.1, 1.5]
 lrs = [1e-5, 1e-4, 1e-3, 1e-2]
 weight_decays = [1e-4, 1e-3, 1e-2]
+sampling = "cf"
 
 embedding_k = embedding_sizes[4]
 lr = lrs[-2]
@@ -27,8 +29,8 @@ num_epochs = 1000
 random_seed = 0
 evaluate_interval = 50
 top_k_list = [3, 5, 7]
-# balance_param = balance_params[0]
-# temperature = temperatures[0]
+balance_param = balance_params[0]
+temperature = temperatures[0]
 
 data_dir = "/Users/wonhyung64/Github/DRS/data"
 dataset_name = "yahoo_r3"
@@ -59,9 +61,12 @@ wandb_var = wandb.init(
         "weight_decat": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
+        "sampling" : sampling,
+        "balance_param" : balance_param,
+        "temperature" : temperature,
     }
 )
-wandb.run.name = f"ncf_{expt_num}"
+wandb.run.name = f"ccl_{expt_num}"
 
 
 #%% DATA LOADER
@@ -102,6 +107,16 @@ y_test = binarize(y_test)
 num_sample = len(x_train)
 total_batch = num_sample // batch_size
 
+train_df = pd.DataFrame(data=x_train, columns=["user", "item"])
+train_popularity = train_df["item"].value_counts().reset_index().sort_values("item")["count"].values
+train_popularity = np.sqrt(train_popularity / train_popularity.max())
+
+unexposed_dict = {}
+for i in range(1, num_users+1):
+    exposed_items = train_df[train_df["user"] == i]["item"].tolist()
+    unexposed_items = [j for j in range(1, num_items+1) if j not in exposed_items]
+    unexposed_dict[i] = unexposed_items
+
 
 #%% TRAIN INITIAILIZE
 model = NCF(num_users, num_items, embedding_k)
@@ -118,7 +133,6 @@ for epoch in range(1, num_epochs+1):
     model.train()
 
     for idx in range(total_batch):
-
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
@@ -126,22 +140,48 @@ for epoch in range(1, num_epochs+1):
         sub_y = y_train[selected_idx]
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        pred, user_embed, item_embed = model(sub_x)
+        # sampling
+        batch_users = x_train[selected_idx, 0].tolist()
+        if sampling == "cf":
+            unexposed_items_ = []
+            for u in batch_users:
+                unexposed_item = np.random.choice(unexposed_dict[u],1)
+                unexposed_items_.append(unexposed_item)
+            augmented_items = torch.tensor(np.stack(unexposed_items_)-1).to(device)
+        aug_x = torch.cat([sub_x[:, :1], augmented_items], dim=-1)
 
+        pred, user_embed, item_embed = model(sub_x)
+        _, aug_user_embed, aug_item_embed = model(aug_x)
+        org_embed = torch.cat([user_embed, item_embed], dim=-1)
+        aug_embed = torch.cat([user_embed, item_embed], dim=-1)
+
+        rev_identity = torch.LongTensor(1 - np.identity(batch_size))
+        indicator = torch.cat([rev_identity, torch.ones_like(rev_identity)], dim=-1).to(device)
+
+        ccl_loss_ = (org_embed * aug_embed).sum(-1)
+        total_embed = torch.cat([org_embed, aug_embed], dim=0)
+        norm_ccl_ = (torch.matmul(org_embed, total_embed.T) * temperature).exp()
+        norm_ccl = (norm_ccl_ * indicator).sum(-1)
+        ccl_loss = -torch.log(ccl_loss_ / norm_ccl).mean()
+        
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+
+        total_loss = rec_loss + ccl_loss
 
         loss_dict: dict = {
             'rec_loss': float(rec_loss.item()),
+            'ccl_loss': float(ccl_loss.item()),
+            'total_loss': float(total_loss.item()),
         }
         wandb_var.log(loss_dict)
 
-        epoch_loss += rec_loss
+        epoch_loss += total_loss
 
         optimizer.zero_grad()
-        rec_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
-    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
+    print(f"[Epoch {epoch:>4d} Train Loss] total: {epoch_loss.item():.4f}")
 
     if epoch % evaluate_interval == 0:
         model.eval()
@@ -151,3 +191,5 @@ for epoch in range(1, num_epochs+1):
         for top_k in top_k_list:
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
         wandb_var.log(ndcg_dict)
+
+# %%
