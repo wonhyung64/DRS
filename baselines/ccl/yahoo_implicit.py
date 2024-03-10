@@ -110,6 +110,7 @@ total_batch = num_sample // batch_size
 train_df = pd.DataFrame(data=x_train, columns=["user", "item"])
 train_popularity = train_df["item"].value_counts().reset_index().sort_values("item")["count"].values
 train_popularity = np.sqrt(train_popularity / train_popularity.max())
+pop_difference = np.abs(train_popularity.repeat((num_items)).reshape(num_items, -1) - train_popularity)
 
 unexposed_dict = {}
 for i in range(1, num_users+1):
@@ -126,13 +127,13 @@ loss_fcn = torch.nn.BCELoss()
 
 
 #%% TRAIN
-for epoch in range(1, num_epochs+1):
+for epoch in range(1, num_epochs+1):break
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
     epoch_loss = 0
     model.train()
 
-    for idx in range(total_batch):
+    for idx in range(total_batch):break
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
@@ -142,12 +143,17 @@ for epoch in range(1, num_epochs+1):
 
         # sampling
         batch_users = x_train[selected_idx, 0].tolist()
+
         if sampling == "cf":
             unexposed_items_ = []
             for u in batch_users:
                 unexposed_item = np.random.choice(unexposed_dict[u],1)
                 unexposed_items_.append(unexposed_item)
             augmented_items = torch.tensor(np.stack(unexposed_items_)-1).to(device)
+
+        elif sampling == "pop":
+            pop_difference
+
         aug_x = torch.cat([sub_x[:, :1], augmented_items], dim=-1)
 
         pred, user_embed, item_embed = model(sub_x)
