@@ -19,17 +19,17 @@ balance_params = [0.5, 1.5]
 temperatures = [0.1, 1.5]
 lrs = [1e-5, 1e-4, 1e-3, 1e-2]
 weight_decays = [1e-4, 1e-3, 1e-2]
-sampling = "cf"
+sampling = "pop" #["cf", "pop"]
 
 embedding_k = embedding_sizes[4]
-lr = lrs[-2]
+lr = lrs[0]
 weight_decay = weight_decays[0]
-batch_size = batch_sizes[2]
+batch_size = batch_sizes[3]
 num_epochs = 1000
 random_seed = 0
 evaluate_interval = 50
 top_k_list = [3, 5, 7]
-balance_param = balance_params[0]
+balance_param = 0.5
 temperature = temperatures[0]
 
 data_dir = "/Users/wonhyung64/Github/DRS/data"
@@ -94,7 +94,6 @@ print("[test]  num data:", x_test.shape[0])
 
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
-
 
 x_train, y_train = shuffle(x_train, y_train)
 num_users = x_train[:,0].max()
@@ -161,19 +160,25 @@ for epoch in range(1, num_epochs+1):
         aug_x = torch.cat([sub_x[:, :1], augmented_items], dim=-1)
 
         pred, user_embed, item_embed = model(sub_x)
-        _, aug_user_embed, aug_item_embed = model(aug_x)
         org_embed = torch.cat([user_embed, item_embed], dim=-1)
-        aug_embed = torch.cat([user_embed, item_embed], dim=-1)
+        _, aug_user_embed, aug_item_embed = model(aug_x)
+        aug_embed = torch.cat([user_embed, aug_item_embed], dim=-1)
 
         rev_identity = torch.LongTensor(1 - np.identity(batch_size))
         indicator = torch.cat([rev_identity, torch.ones_like(rev_identity)], dim=-1).to(device)
 
-        ccl_loss_ = (org_embed * aug_embed).sum(-1)
-        total_embed = torch.cat([org_embed, aug_embed], dim=0)
-        norm_ccl_ = (torch.matmul(org_embed, total_embed.T) * temperature).exp()
-        norm_ccl = (norm_ccl_ * indicator).sum(-1)
-        ccl_loss = -torch.log(ccl_loss_ / norm_ccl).mean()
-        
+        ccl_loss_ = ((org_embed * aug_embed).sum(-1) * temperature).exp()
+
+        total_embed1 = torch.cat([org_embed, aug_embed], dim=0)
+        norm_ccl1_ = (torch.matmul(org_embed, total_embed1.T) * temperature).exp()
+        norm_ccl1 = (norm_ccl1_ * indicator).sum(-1)
+
+        total_embed2 = torch.cat([aug_embed, org_embed], dim=0)
+        norm_ccl2_ = (torch.matmul(aug_embed, total_embed2.T) * temperature).exp()
+        norm_ccl2 = (norm_ccl2_ * indicator).sum(-1)
+
+        ccl_loss = (-torch.log(ccl_loss_ / norm_ccl1) -torch.log(ccl_loss_ / norm_ccl2)).sum() / (batch_size*2) * balance_param
+
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
 
         total_loss = rec_loss + ccl_loss
