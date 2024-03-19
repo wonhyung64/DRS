@@ -90,6 +90,10 @@ print("[test]  num data:", x_test.shape[0])
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
+pos_user_samples_ = np.load("./assets/pos_user_samples.npy")
+train_user_indices = x_train.copy()[:, 0] - 1
+pos_user_samples = pos_user_samples_[train_user_indices]
+x_train = np.concatenate([x_train, np.expand_dims(pos_user_samples, axis=-1)], axis=-1)
 
 x_train, y_train = shuffle(x_train, y_train)
 num_users = x_train[:,0].max()
@@ -102,54 +106,6 @@ y_test = binarize(y_test)
 num_sample = len(x_train)
 total_batch = num_sample // batch_size
 
-
-#%% POS NEG MATRIX
-data_set_dir = os.path.join(data_dir, dataset_name)
-train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
-test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
-
-x_train = []
-with open(train_file, "r") as f:
-    for line in f:
-        x_train.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_train = np.array(x_train).astype(int)
-
-x_test = []
-with open(test_file, "r") as f:
-    for line in f:
-        x_test.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_test = np.array(x_test).astype(int)
-
-num_users = x_train[:,0].max()
-num_items = x_train[:,1].max()
-
-y_train_ = x_train[:,2:].copy()
-bi_x_train = np.concatenate([x_train[:,:2], binarize(y_train_)], axis=-1)
-
-from tqdm import tqdm
-total_feedback_list = []
-for u in tqdm(range(num_users)):
-    user_interactions = bi_x_train[bi_x_train[:,0]-1  == u]
-    obs_items = (user_interactions[:,1]-1).tolist()
-    obs_feedbacks = (user_interactions[:,2]).tolist()
-    # item_idx = 13
-    user_feedback_list = []
-    for item_idx in range(num_items):
-        if item_idx in obs_items:
-            user_feedback_list.append(obs_feedbacks[obs_items.index(item_idx)])
-        else:
-            user_feedback_list.append(0)
-    total_feedback_list.append(user_feedback_list)
-total_feedback = np.array(total_feedback_list).astype(np.float32)
-
-A = torch.tensor(total_feedback)
-A = A.to("mps")
-
-B = torch.matmul(A, A.T)
-B.argmax()
-torch.argmax(B[5])
 
 #%% TRAIN INITIAILIZE
 model = NCF(num_users, num_items, embedding_k)
@@ -170,11 +126,17 @@ for epoch in range(1, num_epochs+1):break
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
-        sub_x = torch.LongTensor(sub_x - 1).to(device)
+
+        org_x = sub_x[:, [0,1]]
+        aug_x = sub_x[:, [2,1]]
+        org_x = torch.LongTensor(org_x - 1).to(device)
+        aug_x = torch.LongTensor(aug_x - 1).to(device)
+
         sub_y = y_train[selected_idx]
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        pred, user_embed, item_embed = model(sub_x)
+        pred, user_embed, item_embed = model(org_x)
+        _, aug_user_embed, __ = model(aug_x)
 
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
 
