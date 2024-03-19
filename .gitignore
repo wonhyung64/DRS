@@ -22,3 +22,4 @@ __pycache__/
 wandb/
 weights/
 .DS_Store
+assets/
