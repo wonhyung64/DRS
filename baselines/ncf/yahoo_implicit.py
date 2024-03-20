@@ -1,4 +1,3 @@
-#%%
 import os
 import torch
 import numpy as np
@@ -10,12 +9,10 @@ from metric import ndcg_func
 from utils import binarize, shuffle
 
 
-#%% SETTINGS
+for random_seed in range(10):
 embedding_sizes = [4, 8, 16, 32, 64]
 hidden_layers_num = [1, 2, 3]
 batch_sizes = [512, 1024, 2048, 4096]
-# balance_params = [0.5, 1.5]
-# temperatures = [0.1, 1.5]
 lrs = [1e-5, 1e-4, 1e-3, 1e-2]
 weight_decays = [1e-4, 1e-3, 1e-2]
 
@@ -24,16 +21,16 @@ lr = lrs[-2]
 weight_decay = weight_decays[0]
 batch_size = batch_sizes[2]
 num_epochs = 1000
-random_seed = 0
+# random_seed = 0
 evaluate_interval = 50
-top_k_list = [3, 5, 7]
-# balance_param = balance_params[0]
-# temperature = temperatures[0]
+top_k_list = [3, 5, 7, 10]
 
-data_dir = "/Users/wonhyung64/Github/DRS/data"
+data_dir = "./data"
 dataset_name = "yahoo_r3"
 
-if torch.backends.mps.is_available():
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
     device = "mps"
 else: 
     device = "cpu"
@@ -46,7 +43,6 @@ np.random.seed(random_seed)
 torch.manual_seed(random_seed)
 
 
-#%% WandB
 wandb_var = wandb.init(
     project="drs",
     config={
@@ -64,7 +60,7 @@ wandb_var = wandb.init(
 wandb.run.name = f"ncf_{expt_num}"
 
 
-#%% DATA LOADER
+# DATA LOADER
 data_set_dir = os.path.join(data_dir, dataset_name)
 train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
 test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
@@ -103,14 +99,14 @@ num_sample = len(x_train)
 total_batch = num_sample // batch_size
 
 
-#%% TRAIN INITIAILIZE
+# TRAIN INITIAILIZE
 model = NCF(num_users, num_items, embedding_k)
 model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 loss_fcn = torch.nn.BCELoss()
 
 
-#%% TRAIN
+# TRAIN
 for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
