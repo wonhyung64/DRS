@@ -1,8 +1,9 @@
 #%%
 import os
+import wandb
 import torch
 import numpy as np
-import wandb
+import torch.nn.functional as F
 from datetime import datetime
 
 from module.model import NCF
@@ -10,12 +11,25 @@ from module.metric import ndcg_func
 from module.utils import binarize, shuffle
 
 
+def contrastive_loss(user_embed, aug_user_embed, scale=1.):
+    batch_size = user_embed.shape[0]
+    org_norm = F.normalize(user_embed, p=2, dim=1)
+    aug_norm = F.normalize(aug_user_embed, p=2, dim=1)
+    pred = F.linear(org_norm, aug_norm) / scale
+    pos_label = torch.eye(batch_size).to(user_embed.device)
+    neg_label = 1 - pos_label
+    pos_feat = (pred.exp() * pos_label).sum(dim=-1)
+    neg_feat = (pred.exp() * neg_label).sum(dim=-1)
+
+    return -torch.log(pos_feat / (pos_feat + neg_feat)).mean()
+
+
 #%% SETTINGS
 embedding_sizes = [4, 8, 16, 32, 64]
 hidden_layers_num = [1, 2, 3]
 batch_sizes = [512, 1024, 2048, 4096]
 # balance_params = [0.5, 1.5]
-# temperatures = [0.1, 1.5]
+temperatures = [1., 6., 12., 24.]
 lrs = [1e-5, 1e-4, 1e-3, 1e-2]
 weight_decays = [1e-4, 1e-3, 1e-2]
 
@@ -28,7 +42,7 @@ random_seed = 0
 evaluate_interval = 50
 top_k_list = [3, 5, 7]
 # balance_param = balance_params[0]
-# temperature = temperatures[0]
+temperature = temperatures[1]
 
 data_dir = "/Users/wonhyung64/Github/DRS/data"
 dataset_name = "yahoo_r3"
@@ -59,6 +73,7 @@ wandb_var = wandb.init(
         "weight_decat": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
+        "temperature": temperature,
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -115,13 +130,13 @@ loss_fcn = torch.nn.BCELoss()
 
 
 #%% TRAIN
-for epoch in range(1, num_epochs+1):break
+for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
     epoch_loss = 0
     model.train()
 
-    for idx in range(total_batch):break
+    for idx in range(total_batch):
 
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
@@ -139,16 +154,20 @@ for epoch in range(1, num_epochs+1):break
         _, aug_user_embed, __ = model(aug_x)
 
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        cl_loss = contrastive_loss(user_embed, aug_user_embed, temperature)
+        total_loss = rec_loss + cl_loss
 
         loss_dict: dict = {
             'rec_loss': float(rec_loss.item()),
+            'cl_loss': float(cl_loss.item()),
+            'total_loss': float(total_loss.item()),
         }
         wandb_var.log(loss_dict)
 
-        epoch_loss += rec_loss
+        epoch_loss += total_loss
 
         optimizer.zero_grad()
-        rec_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
     print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
