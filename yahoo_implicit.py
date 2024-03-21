@@ -39,16 +39,18 @@ lr = lrs[-2]
 weight_decay = weight_decays[0]
 batch_size = batch_sizes[2]
 num_epochs = 1000
-# random_seed = 0
+random_seed = 0
 evaluate_interval = 50
 top_k_list = [3, 5, 7, 10]
 # balance_param = balance_params[0]
-# temperature = temperatures[0]
+temperature = temperatures[1]
 data_dir = "./data"
 dataset_name = "yahoo_r3"
 
-for random_seed in range(1, 10):
-    for temperature in temperatures:
+for _ in range(1):
+# for random_seed in range(1, 10):
+    for lr in [1e-5, 1e-4]:
+    # for temperature in temperatures:
 
         if torch.cuda.is_available():
             device = "cuda"
