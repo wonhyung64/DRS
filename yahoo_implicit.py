@@ -49,7 +49,7 @@ dataset_name = "yahoo_r3"
 
 for _ in range(1):
 # for random_seed in range(1, 10):
-    for lr in [1e-5, 1e-4]:
+    for weight_decay in [1e-3, 1e-2]:
     # for temperature in temperatures:
 
         if torch.cuda.is_available():
@@ -77,7 +77,7 @@ for _ in range(1):
                 "num_epochs" : num_epochs,
                 "evaluate_interval" : evaluate_interval,
                 "lr" : lr,
-                "weight_decat": weight_decay,
+                "weight_decay": weight_decay,
                 "top_k_list" : top_k_list,
                 "random_seed" : random_seed,
                 "temperature": temperature,
