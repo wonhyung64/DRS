@@ -30,19 +30,19 @@ embedding_sizes = [4, 8, 16, 32, 64]
 hidden_layers_num = [1, 2, 3]
 batch_sizes = [512, 1024, 2048, 4096]
 # balance_params = [0.5, 1.5]
-temperatures = [.1, 1., 6., 12.]
-lrs = [1e-5, 1e-4, 1e-3, 1e-2]
-weight_decays = [1e-4, 1e-3, 1e-2]
+temperatures = [1.]
+lrs = [1e-5, 1e-4]
+weight_decays = [1e-4, 1e-3]
 
 embedding_k = embedding_sizes[4]
-lr = lrs[-2]
+lr = lrs[1]
 weight_decay = weight_decays[0]
-batch_size = batch_sizes[2]
+batch_size = batch_sizes[-1]
 num_epochs = 1000
 random_seed = 0
 evaluate_interval = 50
 top_k_list = [3, 5, 7, 10]
-# balance_param = balance_params[0]
+balance_param = 1.5
 temperature = temperatures[1]
 data_dir = "./data"
 dataset_name = "yahoo_r3"
@@ -81,6 +81,7 @@ for _ in range(1):
                 "top_k_list" : top_k_list,
                 "random_seed" : random_seed,
                 "temperature": temperature,
+                "balance_param": balance_param,
             }
         )
         wandb.run.name = f"ours_{expt_num}"
@@ -161,7 +162,7 @@ for _ in range(1):
                 _, aug_user_embed, __ = model(aug_x)
 
                 rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
-                cl_loss = contrastive_loss(user_embed, aug_user_embed, temperature)
+                cl_loss = contrastive_loss(user_embed, aug_user_embed, temperature) * balance_param
                 total_loss = rec_loss + cl_loss
 
                 loss_dict: dict = {
