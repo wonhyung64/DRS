@@ -9,32 +9,32 @@ from metric import ndcg_func
 from utils import binarize, shuffle
 
 
-for random_seed in range(10):
-    embedding_sizes = [4, 8, 16, 32, 64]
-    hidden_layers_num = [1, 2, 3]
-    batch_sizes = [512, 1024, 2048, 4096]
-    lrs = [1e-5, 1e-4, 1e-3, 1e-2]
-    weight_decays = [1e-4, 1e-3, 1e-2]
+embedding_sizes = [4, 8, 16, 32, 64]
+hidden_layers_num = [1, 2, 3]
+batch_sizes = [512, 1024, 2048, 4096]
+lrs = [1e-5, 1e-4, 1e-3, 1e-2]
+weight_decays = [1e-4, 1e-3, 1e-2]
 
-    embedding_k = embedding_sizes[4]
-    lr = lrs[-2]
-    weight_decay = weight_decays[0]
-    batch_size = batch_sizes[2]
-    num_epochs = 1000
-    # random_seed = 0
-    evaluate_interval = 50
-    top_k_list = [3, 5, 7, 10]
+embedding_k = embedding_sizes[4]
+lr = lrs[-2]
+weight_decay = weight_decays[1]
+batch_size = batch_sizes[-1]
+num_epochs = 1000
+random_seed = 0
+evaluate_interval = 50
+top_k_list = [3, 5, 7, 10]
 
-    data_dir = "../../data"
-    dataset_name = "yahoo_r3"
+data_dir = "../../data"
+dataset_name = "yahoo_r3"
 
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else: 
-        device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
+    device = "mps"
+else: 
+    device = "cpu"
 
+for lr in [1e-3, 1e-4]:
     expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
     save_dir = f"./weights/expt_{expt_num}"
     os.makedirs(f"{save_dir}", exist_ok=True)
