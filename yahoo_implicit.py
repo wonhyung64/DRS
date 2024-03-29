@@ -1,6 +1,13 @@
 #%%
 import os
-import wandb
+# import wandb
+try:
+      import wandb
+except: 
+      import sys
+      import subprocess
+      subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+      import wandb
 import torch
 import argparse
 import numpy as np

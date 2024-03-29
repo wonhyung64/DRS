@@ -19,17 +19,21 @@ DEFAULT_NAME=rec
 RUN_SRC=./run_src.sh
 
 # virutal environment directory
-ENV=/Users/wonhyung64/miniforge3/envs/rank/bin/python
+# ENV=/Users/wonhyung64/miniforge3/envs/rank/bin/python
+# ENV=python3
+ENV=/home1/wonhyung64/anaconda3/envs/openmmlab/bin/python3
 
 # file directory of experiment ".py"
-EXECUTION_FILE=/Users/wonhyung64/Github/DRS/yahoo_implicit.py
+# EXECUTION_FILE=/Users/wonhyung64/Github/DRS/yahoo_implicit.py
+EXECUTION_FILE=/home1/wonhyung64/Github/DRS/yahoo_implicit.py 
+
 
 # data directory for experiments
-DATA_DIR=./assets/data/v.1.2.5/initial_data_type1.json
+DATA_DIR=/home1/wonhyung64/Github/DRS/data
 
 
 for index in ${!experiments[*]}; do
-    echo --job-name=$DEFAULT_NAME$index $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]} 
-    # sbatch --job-name=$DEFAULT_NAME$index $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]}
+    # echo --job-name=$DEFAULT_NAME$index $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]} 
+    sbatch --job-name=$DEFAULT_NAME$index $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]}
     sleep 1
 done
