@@ -2,14 +2,11 @@
 
 # python argparse source for experiments
 experiments=(
-"--lr 1e-3 --weight-decay 1e-3 --batch-size 1024"
-"--lr 1e-3 --weight-decay 1e-4 --batch-size 1024"
-"--lr 1e-4 --weight-decay 1e-3 --batch-size 1024"
-"--lr 1e-4 --weight-decay 1e-4 --batch-size 1024"
-"--lr 1e-3 --weight-decay 1e-3 --batch-size 512"
-"--lr 1e-3 --weight-decay 1e-4 --batch-size 512"
-"--lr 1e-4 --weight-decay 1e-3 --batch-size 512"
-"--lr 1e-4 --weight-decay 1e-4 --batch-size 512"
+# "--lr 5e-5 --weight-decay 1e-4 --batch-size 512"
+"--lr 1e-5 --weight-decay 1e-4 --batch-size 512"
+"--lr 1e-4 --weight-decay 1e-4 --batch-size 256"
+"--lr 5e-5 --weight-decay 1e-4 --batch-size 256"
+"--lr 1e-5 --weight-decay 1e-4 --batch-size 256"
 )
 
 # default prefix of job name
