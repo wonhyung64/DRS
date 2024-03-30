@@ -7,7 +7,7 @@
 #SBATCH -o logs/s_%j.out
 #SBATCH -e logs/s_%j.err
 ##
-#SBATCH --gres=gpu:rtx3090:2
+#SBATCH --gres=gpu:rtx3090:1
 
 hostname
 date

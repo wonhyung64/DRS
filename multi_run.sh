@@ -2,6 +2,15 @@
 
 # python argparse source for experiments
 experiments=(
+# "--lr 1e-3 --weight-decay 1e-3 --batch-size 1024"
+# "--lr 1e-3 --weight-decay 1e-4 --batch-size 1024"
+# "--lr 1e-4 --weight-decay 1e-3 --batch-size 1024"
+# "--lr 1e-4 --weight-decay 1e-4 --batch-size 1024"
+# "--lr 1e-3 --weight-decay 1e-3 --batch-size 1024"
+# "--lr 1e-3 --weight-decay 1e-4 --batch-size 1024"
+# "--lr 1e-4 --weight-decay 1e-3 --batch-size 1024"
+# "--lr 1e-4 --weight-decay 1e-4 --batch-size 1024"
+
 # "--lr 5e-5 --weight-decay 1e-4 --batch-size 512"
 "--lr 1e-5 --weight-decay 1e-4 --batch-size 512"
 "--lr 1e-4 --weight-decay 1e-4 --batch-size 256"
@@ -21,8 +30,8 @@ RUN_SRC=./run_src.sh
 ENV=/home1/wonhyung64/anaconda3/envs/openmmlab/bin/python3
 
 # file directory of experiment ".py"
-# EXECUTION_FILE=/Users/wonhyung64/Github/DRS/yahoo_implicit.py
-EXECUTION_FILE=/home1/wonhyung64/Github/DRS/yahoo_implicit.py 
+EXECUTION_FILE=/home1/wonhyung64/Github/DRS/yahoo_implicit.py                   #OURS
+# EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf/yahoo_implicit.py   #NCF
 
 
 # data directory for experiments
