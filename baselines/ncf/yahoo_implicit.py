@@ -1,13 +1,20 @@
 import os
-import wandb
+import sys
 import torch
 import argparse
+import subprocess
 import numpy as np
 from datetime import datetime
 
 from model import NCF
 from metric import ndcg_func
 from utils import binarize, shuffle
+
+try:
+    import wandb
+except: 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+    import wandb
 
 
 #%% SETTINGS
