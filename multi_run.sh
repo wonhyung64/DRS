@@ -2,6 +2,9 @@
 
 # python argparse source for experiments
 experiments=(
+"--lr 1e-4 --weight-decay 1e-4 --batch-size 256"
+"--lr 5e-5 --weight-decay 1e-4 --batch-size 256"
+"--lr 1e-5 --weight-decay 1e-4 --batch-size 256"
 "--lr 1e-4 --weight-decay 1e-4 --batch-size 128"
 "--lr 5e-5 --weight-decay 1e-4 --batch-size 128"
 "--lr 1e-5 --weight-decay 1e-4 --batch-size 128"

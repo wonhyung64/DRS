@@ -67,7 +67,7 @@ wandb_var = wandb.init(
         "num_epochs" : num_epochs,
         "evaluate_interval" : evaluate_interval,
         "lr" : lr,
-        "weight_decat": weight_decay,
+        "weight_decay": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
     }
