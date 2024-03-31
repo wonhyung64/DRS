@@ -1,15 +1,9 @@
 #%%
 import os
-# import wandb
-try:
-      import wandb
-except: 
-      import sys
-      import subprocess
-      subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
-      import wandb
+import sys
 import torch
 import argparse
+import subprocess
 import numpy as np
 import torch.nn.functional as F
 from datetime import datetime
@@ -17,6 +11,12 @@ from datetime import datetime
 from module.model import NCF
 from module.metric import ndcg_func
 from module.utils import binarize, shuffle
+
+try:
+    import wandb
+except: 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+    import wandb
 
 
 def contrastive_loss(user_embed, aug_user_embed, scale=1.):
@@ -57,9 +57,9 @@ def triplet_loss(anchor_user_embed, pos_user_embed, neg_user_embed, dist='sqeucl
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--embedding-k", type=int, default=64)
-parser.add_argument("--lr", type=float, default=1e-3)
+parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--weight-decay", type=float, default=1e-4)
-parser.add_argument("--batch-size", type=int, default=2048)
+parser.add_argument("--batch-size", type=int, default=256)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
@@ -68,7 +68,8 @@ parser.add_argument("--balance-param", type=float, default=1.5)
 parser.add_argument("--temperature", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
-parser.add_argument("--loss-fn", type=str, default="contrastive")
+parser.add_argument("--contrast-pair", type=str, default="both")
+
 
 try:
     args = parser.parse_args()
@@ -88,7 +89,7 @@ balance_param = args.balance_param
 temperature = args.temperature
 data_dir = args.data_dir
 dataset_name = args.dataset_name
-loss_fn = args.loss_fn
+contrast_pair = args.contrast_pair
 
 
 if torch.cuda.is_available():
@@ -121,7 +122,7 @@ wandb_var = wandb.init(
         "random_seed" : random_seed,
         "temperature": temperature,
         "balance_param": balance_param,
-        "loss_fn": loss_fn
+        "contrast_pair": contrast_pair
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -153,16 +154,24 @@ print("[test]  num data:", x_test.shape[0])
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
+train_user_indices = x_train.copy()[:, 0] - 1
 pos_user_samples_ = np.load("./assets/pos_user_samples.npy")
 neg_user_samples_ = np.load("./assets/neg_user_samples.npy")
-train_user_indices = x_train.copy()[:, 0] - 1
-
 pos_user_samples = pos_user_samples_[train_user_indices]
 neg_user_samples = neg_user_samples_[train_user_indices]
-        
-x_train = np.concatenate([x_train, np.expand_dims(pos_user_samples, axis=-1), np.expand_dims(neg_user_samples, axis=-1)], axis=-1)
+user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
 
-x_train, y_train = shuffle(x_train, y_train)
+train_item_indices = x_train.copy()[:, 1] - 1
+pos_item_samples_ = np.load("./assets/pos_item_samples.npy")
+neg_item_samples_ = np.load("./assets/neg_item_samples.npy")
+pos_item_samples = pos_item_samples_[train_item_indices]
+neg_item_samples = neg_item_samples_[train_item_indices]
+item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
+
+total_samples = np.concatenate([x_train, user_pos_neg, item_pos_neg], axis=-1)
+total_samples, y_train = shuffle(total_samples, y_train)
+x_train, user_pos_neg, item_pos_neg = total_samples[:,0:2], total_samples[:,2:4], total_samples[:,4:6]
+
 num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
@@ -174,7 +183,7 @@ num_sample = len(x_train)
 total_batch = num_sample // batch_size
 
 
-# TRAIN INITIAILIZE
+#%% TRAIN INITIAILIZE
 model = NCF(num_users, num_items, embedding_k)
 model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -189,31 +198,40 @@ for epoch in range(1, num_epochs+1):
     model.train()
 
     for idx in range(total_batch):
+        user_sim_loss = None
+        item_sim_loss = None
 
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
-
-        org_x = sub_x[:, [0,1]]
-        pos_x = sub_x[:, [2,1]]
-        neg_x = sub_x[:, [3,1]]
-        org_x = torch.LongTensor(org_x - 1).to(device)
-        pos_x = torch.LongTensor(pos_x - 1).to(device)
-        neg_x = torch.LongTensor(neg_x - 1).to(device)
+        org_x = torch.LongTensor(sub_x - 1).to(device)
 
         sub_y = y_train[selected_idx]
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        pred, anchor_user_embed, item_embed = model(org_x)
-        _, pos_user_embed, __ = model(pos_x)
-        if loss_fn == "triplet":
-            _, neg_user_embed, __ = model(neg_x)
-
+        pred, anchor_user_embed, anchor_item_embed = model(org_x)
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
-        if loss_fn == "contrastive":
-            cl_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
-        elif loss_fn == "triplet":
-            cl_loss = triplet_loss(anchor_user_embed, pos_user_embed, neg_user_embed) * balance_param
+
+        pos_x = np.stack([user_pos_neg[selected_idx,0], item_pos_neg[selected_idx,0]], axis=-1)
+        pos_x = torch.LongTensor(pos_x - 1).to(device)
+        _, pos_user_embed, pos_item_embed = model(pos_x)
+
+        if contrast_pair == "user":
+            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
+            cl_loss = user_sim_loss
+            
+        elif contrast_pair == "item":
+            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
+            cl_loss = item_sim_loss
+
+        elif contrast_pair == "both":
+            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
+            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
+            cl_loss = (user_sim_loss + item_sim_loss)
+
+        else: 
+            raise ValueError("Unknown contrastive learning pair!")
+
         total_loss = rec_loss + cl_loss
 
         loss_dict: dict = {
@@ -221,6 +239,12 @@ for epoch in range(1, num_epochs+1):
             'cl_loss': float(cl_loss.item()),
             'total_loss': float(total_loss.item()),
         }
+
+        if user_sim_loss != None:
+            loss_dict["user_sim_loss"] = float(user_sim_loss.item())
+        if item_sim_loss != None:
+            loss_dict["item_sim_loss"] = float(item_sim_loss.item())
+
         wandb_var.log(loss_dict)
 
         epoch_loss += total_loss
