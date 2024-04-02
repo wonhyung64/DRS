@@ -6,18 +6,17 @@ from collections import defaultdict
 def iae_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list):
     """Evaluate nDCG@K of the trained model on test dataset.
     """
-    # all_user_idx = np.unique(x_test[:,0])
-    all_item_idx = np.unique(x_test[:,1])
+    all_item_ids = np.unique(x_test[:,1])
     all_tr_idx = np.arange(len(x_test))
     result_map = defaultdict(list)
 
-    for iid in all_item_idx:
+    for iid in all_item_ids:
         item_idx = all_tr_idx[x_test[:,1] == iid]
         user_idx = x_test[item_idx, 0] - 1
         y_i = y_test[item_idx]
 
-        sub_x = np.zeros((1, model.num_items))
-        users_by_iid = train_dict[iid]
+        sub_x = np.zeros((1, model.num_users))
+        users_by_iid = train_dict[iid-1]
         sub_x[0, users_by_iid] = 1
 
         sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
