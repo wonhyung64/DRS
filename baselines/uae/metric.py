@@ -16,8 +16,8 @@ def uae_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list):
         y_u = y_test[user_idx]
 
         sub_x = np.zeros((1, model.num_items))
-        users_by_user_id = train_dict[uid]
-        sub_x[0, users_by_user_id] = 1
+        items_by_uid = train_dict[uid]
+        sub_x[0, items_by_uid] = 1
 
         sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
         pred_, _ = model(sub_x)

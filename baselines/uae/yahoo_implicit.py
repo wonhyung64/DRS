@@ -149,8 +149,8 @@ for epoch in range(1, num_epochs+1):
 
         sub_x = np.zeros((batch_size, num_items))
         for i, user_id in enumerate(selected_idx):
-            users_by_user_id = train_dict[user_id]
-            sub_x[i, users_by_user_id] = 1
+            items_by_user_id = train_dict[user_id]
+            sub_x[i, items_by_user_id] = 1
 
         sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
         pred, z = model(sub_x)
