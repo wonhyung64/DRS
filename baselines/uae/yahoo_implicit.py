@@ -1,3 +1,4 @@
+#%%
 import os
 import sys
 import torch
@@ -5,10 +6,12 @@ import argparse
 import subprocess
 import numpy as np
 from datetime import datetime
+from scipy import sparse
 
-from model import NCF
-from metric import ndcg_func
-from utils import binarize, shuffle
+from model import UAE
+from loss import l2_loss, squred_loss
+from metric import uae_ndcg_func
+from utils import binarize
 
 try:
     import wandb
@@ -20,16 +23,17 @@ except:
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--embedding-k", type=int, default=64)
+parser.add_argument("--latent-dim", type=int, default=50)
 parser.add_argument("--lr", type=float, default=1e-3)
-parser.add_argument("--weight-decay", type=float, default=1e-4)
 parser.add_argument("--batch-size", type=int, default=2048)
+parser.add_argument("--l2-lambda", type=float, default="1e-5")
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
-parser.add_argument("--data-dir", type=str, default="./data")
+parser.add_argument("--data-dir", type=str, default="../../data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
+
 
 try:
     args = parser.parse_args()
@@ -37,11 +41,11 @@ except:
     args = parser.parse_args([])
 
 
-embedding_k = args.embedding_k
+latent_dim = args.latent_dim
 lr = args.lr
-weight_decay = args.weight_decay
 batch_size = args.batch_size
 num_epochs = args.num_epochs
+l2_lambda =  args.l2_lambda
 random_seed = args.random_seed
 evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
@@ -69,17 +73,17 @@ wandb_var = wandb.init(
     project="drs",
     config={
         "device" : device,
-        "embedding_k" : embedding_k,
+        "latent_dim" : latent_dim,
         "batch_size" : batch_size,
         "num_epochs" : num_epochs,
         "evaluate_interval" : evaluate_interval,
+        "l2_lambda" : l2_lambda,
         "lr" : lr,
-        "weight_decay": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
     }
 )
-wandb.run.name = f"ncf_{expt_num}"
+wandb.run.name = f"uae_{expt_num}"
 
 
 #%% DATA LOADER
@@ -105,56 +109,67 @@ print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
 print("[test]  num data:", x_test.shape[0])
 
-x_train, y_train = x_train[:,:-1], x_train[:,-1]
-x_test, y_test = x_test[:, :-1], x_test[:,-1]
-
-
-x_train, y_train = shuffle(x_train, y_train)
 num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
 
+x_train, y_train = x_train[:,:-1], x_train[:,-1:]
+x_test, y_test = x_test[:, :-1], x_test[:,-1]
+
 y_train = binarize(y_train)
 y_test = binarize(y_test)
 
-num_sample = len(x_train)
-total_batch = num_sample // batch_size
 
+matrix = sparse.lil_matrix((num_users, num_items))
+for (u, i, r) in np.concatenate([x_train, y_train], axis=-1):
+    if r:
+        matrix[int(u)-1, int(i)-1] = r
+sparse_train = sparse.csr_matrix(matrix)
+
+train_dict = {}
+for idx, value in enumerate(sparse_train):
+    train_dict[idx] = value.indices.copy().tolist()
+
+total_batch = num_users // batch_size
 
 #%% TRAIN
-model = NCF(num_users, num_items, embedding_k)
+model = UAE(num_users, num_items)
 model = model.to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-loss_fcn = torch.nn.BCELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 for epoch in range(1, num_epochs+1):
-    all_idx = np.arange(num_sample)
+    all_idx = np.arange(num_users)
     np.random.shuffle(all_idx)
     epoch_loss = 0
     model.train()
 
     for idx in range(total_batch):
-
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
-        sub_x = x_train[selected_idx]
-        sub_x = torch.LongTensor(sub_x - 1).to(device)
-        sub_y = y_train[selected_idx]
-        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        pred, user_embed, item_embed = model(sub_x)
+        sub_x = np.zeros((batch_size, num_items))
+        for i, user_id in enumerate(selected_idx):
+            users_by_user_id = train_dict[user_id]
+            sub_x[i, users_by_user_id] = 1
 
-        rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
+        pred, z = model(sub_x)
+
+        recon_loss = squred_loss(sub_x, pred)
+        l2_reg = l2_loss(model) * l2_lambda
+        total_loss = recon_loss + l2_reg
 
         loss_dict: dict = {
-            'rec_loss': float(rec_loss.item()),
+            'recon_loss': float(recon_loss.item()),
+            'l2_reg': float(l2_reg.item()),
+            'total_loss': float(total_loss.item()),
         }
         wandb_var.log(loss_dict)
 
-        epoch_loss += rec_loss
+        epoch_loss += total_loss
 
         optimizer.zero_grad()
-        rec_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
     print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
@@ -162,7 +177,7 @@ for epoch in range(1, num_epochs+1):
     if epoch % evaluate_interval == 0:
         model.eval()
 
-        ndcg_res = ndcg_func(model, x_test, y_test, device, top_k_list)
+        ndcg_res = uae_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list)
         ndcg_dict: dict = {}
         for top_k in top_k_list:
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])

@@ -10,12 +10,12 @@ import pandas as pd
 # load dataset.
 col = {0: 'user', 1: 'item', 2: 'rate'}
 
-# train_file = f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-train.txt'
+train_file = f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-train.txt'
 with codecs.open(f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-train.txt', 'r', 'utf-8', errors='ignore') as f:
     data_train = pd.read_csv(f, delimiter='\t', header=None)
     data_train.rename(columns=col, inplace=True)
 
-# test_file = f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-test.txt'
+test_file = f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-test.txt'
 with codecs.open(f'/Users/wonhyung64/Github/DRS/data/yahoo_r3/ydata-ymusic-rating-study-v1_0-test.txt', 'r', 'utf-8', errors='ignore') as f:
     data_test = pd.read_csv(f, delimiter='\t', header=None)
     data_test.rename(columns=col, inplace=True)
@@ -66,171 +66,32 @@ train = np.r_[np.c_[train, np.ones(train.shape[0])], np.c_[unlabeled_data, np.ze
 
 
 #%%
-from tqdm import tqdm
-random_state = 0
-"""
-Add methods in AE models 
-"""
-sub_results_sum = pd.DataFrame()
 
-# train
-if self.model_name in ['uae', 'iae']:
-    weights_enc, weights_dec, bias_enc, bias_dec = ae_trainer(sess, data=self.data, train=train, val=val, test=test,
-                num_users=num_users, num_items=num_items, n_components=self.dim, 
-                eta=self.eta, lam=self.lam, max_iters=self.max_iters, batch_size=self.batch_size, 
-                model_name=self.model_name, item_freq=item_freq,
-                unbiased_eval = self.unbiased_eval, random_state=random_state)
-
-def ae_trainer(sess: tf.Session, data, train: np.ndarray, val: np.ndarray, test: np.ndarray, num_users: int, num_items: int,
-                   n_components: int, eta, lam: float, max_iters, batch_size,
-                   model_name: str, item_freq: np.ndarray,
-                   unbiased_eval: bool, random_state: int, wu=0.1, wi=0.1) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-
-    """Train autoencoder models."""
-    if model_name == 'uae':
-        model = uAE(sess, data,  train, val, test, num_users, num_items, hidden_dim=n_components, eta=eta, random_state=random_state,
-                    reg=lam, max_iters=max_iters, batch_size=batch_size)
-        model.train_model(pscore=item_freq, unbiased_eval=unbiased_eval)
-
-import torch.nn as nn
-class UAE(nn.Module):
-    """The neural collaborative filtering method.
-    """
-    def __init__(self, num_users, num_items, latent_dim=50):
-        super(UAE, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
-        self.latent_dim = latent_dim #[50, 100, 200, 400]
-
-        self.encoder = nn.Sequential(
-            nn.Linear(self.num_items, self.latent_dim), 
-            nn.Sigmoid(),
-        )
-        self.decoder = nn.Sequential(
-            nn.Linear(self.latent_dim, self.num_items), 
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x):
-        z = self.encoder(x)
-        output = self.decoder(z)
-        return output, z
+from scipy import sparse
 
 
-
-model = UAE(num_users, num_items)
-# model = model.to(device)
-
-import torch
-def squred_loss(true, pred):
-    return torch.mean(true * torch.square(1 - pred) + (1 - true) * torch.square(pred))
-
-def l2_loss(model):
-    penalty = 0.
-    for param in model.parameters():
-        penalty += torch.square(param).sum()
-    return penalty
-
-l2_lambda = 0.00001
-lr = 1e-3
-
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+matrix = sparse.lil_matrix((num_users, num_items))
+for (u, i, r) in train[:, :3]:
+    matrix[int(u)-1, int(i)-1] = r
+sparse_train = sparse.csr_matrix(matrix)
 
 
-class uAE(AbstractRecommender):
-    def __init__(self, sess, data, train, val, test, num_user: np.array, num_item: np.array, \
-                 hidden_dim: int, eta: float, reg: float, max_iters: int, batch_size: int, random_state: int) -> None:        
-        """Initialize Class."""
-        self.data = data
-        self.num_users = num_user
-        self.num_items = num_item
-        self.hidden_dim = hidden_dim
-        self.eta = eta
-        self.reg = reg
-        self.num_epochs = max_iters
-        self.batch_size = batch_size
-        self.train = train
-        self.val = val
-        self.test = test
-        self.train_dict = csr_to_user_dict(tocsr(train, num_user, num_item))
-        self.sess = sess
+train_dict = {}
+for idx, value in enumerate(sparse_train):
+    train_dict[idx] = value.indices.copy().tolist()
 
-        self.model_name = 'uae'
-        self.random_state = random_state
+batch_num = int(len(all_tr) / batch_size) +1
+for b in range(batch_num):break
+    batch_set_idx = all_tr[b*batch_size : (b+1)*batch_size]
+    batch_matrix = np.zeros((len(batch_set_idx), num_items))
+    for idx, user_id in enumerate(batch_set_idx):
+        users_by_user_id = train_dict[user_id]
+        batch_matrix[idx, users_by_user_id] = 1
+batch_m = torch.LongTensor(batch_matrix) 
+model(batch_m.type(torch.FloatTensor))
 
-        # Build the graphs
-        self.create_placeholders()
-        self.build_graph()
-        self.create_losses()
-        self.add_optimizer()
-
-        self.best_weights_enc = None
-        self.best_weights_dec = None
-        self.best_bias_enc = None
-        self.best_bias_dec = None
-
-    def create_placeholders(self):
-        with tf.name_scope("input_data"):
-            self.input_R = tf.placeholder(tf.float32, [None, self.num_items])
-
-            self.tmp1 = tf.placeholder(tf.float32, [None, self.num_items])
-            self.tmp2 = tf.placeholder(tf.float32, [None, self.num_items])
-            self.tmp3 = tf.placeholder(tf.float32, [None, self.num_items])
-
-    def build_graph(self):
-        with tf.name_scope("embedding_layer"):  # The embedding initialization is unknown now
-            initializer = tf.contrib.layers.xavier_initializer(seed=self.random_state)
-             
-            self.weights = {'encoder': tf.Variable(initializer([self.num_items, self.hidden_dim])),
-                            'decoder': tf.Variable(initializer([self.hidden_dim, self.num_items]))}
-            self.biases = {'encoder': tf.Variable(initializer([self.hidden_dim])),
-                           'decoder': tf.Variable(initializer([self.num_items]))}
-
-        with tf.name_scope("prediction"):
-            input_R = self.input_R
-            self.encoder_op = tf.sigmoid(tf.matmul(input_R, self.weights['encoder']) +
-                                                  self.biases['encoder'])
-            
-            self.decoder_op = tf.matmul(self.encoder_op, self.weights['decoder']) + self.biases['decoder']
-            self.output = tf.sigmoid(self.decoder_op)
-
-
-    def create_losses(self):
-        with tf.name_scope("loss"):
-            self.loss = tf.reduce_sum( self.input_R * tf.square(1. - self.output) + (1 - self.input_R) * tf.square(self.output) )
-            
-            self.reg_loss = self.reg*l2_loss(self.weights['encoder'], self.weights['decoder'],
-                                             self.biases['encoder'], self.biases['decoder'])
-
-            self.loss = self.loss + self.reg_loss
-
-
-    def add_optimizer(self):
-        with tf.name_scope("optimizer"):
-            self.apply_grads = tf.train.AdagradOptimizer(learning_rate=self.eta).minimize(self.loss)
-
-    def train_model(self, pscore, unbiased_eval):
-        init_op = tf.global_variables_initializer()
-        self.sess.run(init_op)
-
-        max_score = 0
-        er_stop_count = 0
-        early_stop = 5
-
-        all_tr = np.arange(self.num_users)
-        for epoch in range(self.num_epochs):
-            train_loss = 0
-
-            np.random.RandomState(12345).shuffle(all_tr)
-
-            batch_num = int(len(all_tr) / self.batch_size) +1
-            for b in range(batch_num):
-                batch_set_idx = all_tr[b*self.batch_size : (b+1)*self.batch_size]
-                batch_matrix = np.zeros((len(batch_set_idx), self.num_items))
-                for idx, user_id in enumerate(batch_set_idx):
-                    users_by_user_id = self.train_dict[user_id]
-                    batch_matrix[idx, users_by_user_id] = 1
-    
+test
+                model()
                 feed_dict = {self.input_R: batch_matrix}
                
                 _, loss = self.sess.run([self.apply_grads, self.loss], feed_dict=feed_dict)

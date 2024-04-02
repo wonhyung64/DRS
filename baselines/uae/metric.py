@@ -3,7 +3,7 @@ import numpy as np
 from collections import defaultdict
 
 
-def ndcg_func(model, x_test, y_test, device, top_k_list):
+def uae_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list):
     """Evaluate nDCG@K of the trained model on test dataset.
     """
     all_user_idx = np.unique(x_test[:,0])
@@ -11,12 +11,18 @@ def ndcg_func(model, x_test, y_test, device, top_k_list):
     result_map = defaultdict(list)
 
     for uid in all_user_idx:
-        u_idx = all_tr_idx[x_test[:,0] == uid]
-        x_u = torch.LongTensor(x_test[u_idx]-1).to(device)
-        y_u = y_test[u_idx]
-        pred_, _, _ = model(x_u)
-        pred = pred_.flatten().cpu().detach()
-        
+        user_idx = all_tr_idx[x_test[:,0] == uid]
+        item_idx = x_test[user_idx, 1] - 1
+        y_u = y_test[user_idx]
+
+        sub_x = np.zeros((1, model.num_items))
+        users_by_user_id = train_dict[uid]
+        sub_x[0, users_by_user_id] = 1
+
+        sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
+        pred_, _ = model(sub_x)
+        pred_ = pred_.flatten().cpu().detach()
+        pred = pred_[item_idx]
 
         for top_k in top_k_list:
             pred_top_k = np.argsort(-pred.numpy())[:top_k]
