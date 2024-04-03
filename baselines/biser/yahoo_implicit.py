@@ -60,6 +60,8 @@ evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
 data_dir = args.data_dir
 dataset_name = args.dataset_name
+wu = 0.1
+wi = 0.1
 
 
 if torch.cuda.is_available():
@@ -190,9 +192,10 @@ for epoch in range(1, num_epochs+1):
 
         ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
         recon_loss = squred_loss(batch_true/ppscore, batch_pred)
-        tmp_loss = batch_true * torch.square(batch_epoch_matrix - batch_pred)
+        tmp_loss = batch_true * torch.square(batch_epoch_matrix - batch_pred) * wu
+        l2_reg = l2_loss(uae) * uae_l2_lambda
 
-        uae_loss = recon_loss + tmp_loss
+        uae_loss = recon_loss + tmp_loss + l2_reg
         uae_optimizer.zero_grad()
         uae_loss.backward()
         uae_optimizer.step()
@@ -212,18 +215,14 @@ for epoch in range(1, num_epochs+1):
 
         ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
         recon_loss = squred_loss(batch_true/ppscore, batch_pred)
-        tmp_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred))
+        tmp_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred)) * wi
+        l2_reg = l2_loss(iae) * iae_l2_lambda
 
         iae_loss = recon_loss + tmp_loss
         iae_optimizer.zero_grad()
         iae_loss.backward()
         iae_optimizer.step()
 
-
-        
-        recon_loss = squred_loss(sub_x, pred)
-        l2_reg = l2_loss(model) * l2_lambda
-        total_loss = recon_loss + l2_reg
 
         loss_dict: dict = {
             'recon_loss': float(recon_loss.item()),
