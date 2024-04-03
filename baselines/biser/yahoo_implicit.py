@@ -38,6 +38,8 @@ parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--data-dir", type=str, default="../../data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
+parser.add_argument("--weight-uae", type=float, default=0.1)
+parser.add_argument("--weight-iae", type=float, default=0.1)
 
 
 try:
@@ -60,8 +62,8 @@ evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
 data_dir = args.data_dir
 dataset_name = args.dataset_name
-wu = 0.1
-wi = 0.1
+weight_uae = args.weight_uae
+weight_iae = args.weight_iae
 
 
 if torch.cuda.is_available():
@@ -96,6 +98,8 @@ wandb_var = wandb.init(
         "iae_lr" : iae_lr,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
+        "weight_uae" : weight_uae,
+        "weight_iae" : weight_uae,
     }
 )
 wandb.run.name = f"biser_{expt_num}"
@@ -145,13 +149,6 @@ train_ui_matrix = sparse_train.toarray()
 train_iu_matrix = sparse_train.T.toarray()
 
 
-#%%
-train_dict = {}
-for idx, value in enumerate(sparse_train):
-    train_dict[idx] = value.indices.copy().tolist()
-
-total_batch = num_users // batch_size
-
 #%% TRAIN
 uae = UAE(num_users, num_items)
 uae = uae.to(device)
@@ -181,68 +178,76 @@ for epoch in range(1, num_epochs+1):
     np.random.shuffle(all_user_idx)
     np.random.shuffle(all_item_idx)
 
-
     #UAE
+    epoch_uae_loss = 0.
     total_batch = num_users // uae_batch_size
-    for idx in tqdm(range(total_batch)):break
+    for idx in range(total_batch):
         selected_idx = all_user_idx[uae_batch_size*idx : (idx+1)*uae_batch_size]
         batch_true = train_ui_matrix[selected_idx]
-        batch_epoch_matrix = epoch_uae_matrix[selected_idx]
+        batch_epoch_matrix = epoch_iae_matrix.T[selected_idx]
         batch_pred, z = uae(batch_true)
 
         ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
-        recon_loss = squred_loss(batch_true/ppscore, batch_pred)
-        tmp_loss = batch_true * torch.square(batch_epoch_matrix - batch_pred) * wu
-        l2_reg = l2_loss(uae) * uae_l2_lambda
+        uae_recon_loss = squred_loss(batch_true/ppscore, batch_pred)
+        uae_biliteral_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred)) * weight_uae
+        uae_l2_reg = l2_loss(uae) * uae_l2_lambda
 
-        uae_loss = recon_loss + tmp_loss + l2_reg
+        uae_loss = uae_recon_loss + uae_biliteral_loss + uae_l2_reg
         uae_optimizer.zero_grad()
         uae_loss.backward()
         uae_optimizer.step()
 
+        epoch_uae_loss += uae_loss
 
-        loss.backward(retain_graph=True)
+        loss_dict: dict = {
+            'uae_recon_loss': float(uae_recon_loss.item()),
+            'uae_biliteral_loss': float(uae_biliteral_loss.item()),
+            'uae_l2_reg': float(uae_l2_reg.item()),
+            'uae_loss': float(uae_loss.item()),
+        }
+        wandb_var.log(loss_dict)
 
     #IAE
+    epoch_iae_loss = 0.
     total_batch = num_items // iae_batch_size
-    for idx in tqdm(range(total_batch)):
+    for idx in range(total_batch):
         # mini-batch training
         selected_idx = all_item_idx[iae_batch_size*idx : (idx+1)*iae_batch_size]
 
         batch_true = train_iu_matrix[selected_idx]
-        batch_epoch_matrix = epoch_iae_matrix[selected_idx]
+        batch_epoch_matrix = epoch_uae_matrix.T[selected_idx]
         batch_pred, z = iae(batch_true)
 
         ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
-        recon_loss = squred_loss(batch_true/ppscore, batch_pred)
-        tmp_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred)) * wi
-        l2_reg = l2_loss(iae) * iae_l2_lambda
+        iae_recon_loss = squred_loss(batch_true/ppscore, batch_pred)
+        iae_biliteral_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred)) * weight_iae
+        iae_l2_reg = l2_loss(iae) * iae_l2_lambda
 
-        iae_loss = recon_loss + tmp_loss
+        iae_loss = iae_recon_loss + iae_biliteral_loss + iae_l2_reg
         iae_optimizer.zero_grad()
         iae_loss.backward()
         iae_optimizer.step()
 
+        epoch_iae_loss += iae_loss
 
         loss_dict: dict = {
-            'recon_loss': float(recon_loss.item()),
-            'l2_reg': float(l2_reg.item()),
-            'total_loss': float(total_loss.item()),
+            'iae_recon_loss': float(iae_recon_loss.item()),
+            'iae_biliteral_loss': float(iae_biliteral_loss.item()),
+            'iae_l2_reg': float(iae_l2_reg.item()),
+            'iae_loss': float(iae_loss.item()),
         }
         wandb_var.log(loss_dict)
 
-        epoch_loss += total_loss
+    print(f"[Epoch {epoch:>4d} Train Loss] uae: {epoch_uae_loss.item():.4f} / iae: {epoch_iae_loss.item():.4f}")
 
-        optimizer.zero_grad()
-        total_loss.backward()
-        optimizer.step()
-
-    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
 
     if epoch % evaluate_interval == 0:
-        model.eval()
+        uae.eval()
+        iae.eval()
 
-        ndcg_res = uae_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list)
+        ndcg_res = biser_ndcg_func(
+            uae, iae, x_test, y_test, train_ui_matrix, train_iu_matrix, device, top_k_list
+            )
         ndcg_dict: dict = {}
         for top_k in top_k_list:
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])

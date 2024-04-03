@@ -3,26 +3,23 @@ import numpy as np
 from collections import defaultdict
 
 
-def biser_ndcg_func(model, x_test, y_test, train_dict, device, top_k_list):
+def biser_ndcg_func(uae, iae, x_test, y_test, train_ui_matrix, train_iu_matrix, device, top_k_list):
     """Evaluate nDCG@K of the trained model on test dataset.
     """
     all_user_ids = np.unique(x_test[:,0])
     all_tr_idx = np.arange(len(x_test))
     result_map = defaultdict(list)
 
+    pred_uae_matrix, _ = uae(train_ui_matrix)
+    pred_iae_matrix, _ = iae(train_iu_matrix)
+    pred_matrix = (pred_uae_matrix + pred_iae_matrix.T)/2
+
     for uid in all_user_ids:
         user_idx = all_tr_idx[x_test[:,0] == uid]
         item_idx = x_test[user_idx, 1] - 1
         y_u = y_test[user_idx]
 
-        sub_x = np.zeros((1, model.num_items))
-        items_by_uid = train_dict[uid-1]
-        sub_x[0, items_by_uid] = 1
-
-        sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
-        pred_, _ = model(sub_x)
-        pred_ = pred_.flatten().cpu().detach()
-        pred = pred_[item_idx]
+        pred = pred_matrix.cpu().detach()[uid-1, item_idx]
 
         for top_k in top_k_list:
             pred_top_k = np.argsort(-pred.numpy())[:top_k]
