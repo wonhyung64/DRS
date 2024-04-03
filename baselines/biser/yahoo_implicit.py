@@ -7,6 +7,7 @@ import subprocess
 import numpy as np
 from datetime import datetime
 from scipy import sparse
+from tqdm import tqdm
 
 from model import UAE, IAE
 from loss import l2_loss, squred_loss
@@ -164,34 +165,62 @@ for epoch in range(1, num_epochs+1):
     uae.train()
     if type(train_ui_matrix) != torch.Tensor:
         train_ui_matrix = torch.LongTensor(train_ui_matrix).type(torch.float32).to(device)
-    pred_uae_matrix, _ = uae(train_ui_matrix)
+    with torch.no_grad():
+        epoch_uae_matrix, _ = uae(train_ui_matrix)
 
     iae.train()
     if type(train_iu_matrix) != torch.Tensor:
         train_iu_matrix = torch.LongTensor(train_iu_matrix).type(torch.float32).to(device)
-    pred_iae_matrix, _ = iae(train_iu_matrix)
+    with torch.no_grad():
+        epoch_iae_matrix, _ = iae(train_iu_matrix)
 
     all_user_idx = np.arange(num_users)
     all_item_idx = np.arange(num_items)
     np.random.shuffle(all_user_idx)
     np.random.shuffle(all_item_idx)
 
-    epoch_loss = 0
+
     #UAE
     total_batch = num_users // uae_batch_size
-    for idx in range(total_batch):
-        # mini-batch training
+    for idx in tqdm(range(total_batch)):break
         selected_idx = all_user_idx[uae_batch_size*idx : (idx+1)*uae_batch_size]
+        batch_true = train_ui_matrix[selected_idx]
+        batch_epoch_matrix = epoch_uae_matrix[selected_idx]
+        batch_pred, z = uae(batch_true)
 
-        batch_pred = np.zeros((uae_batch_size, num_items))
-        batch_true = np.zeros((uae_batch_size, num_items))
-        for i, user_id in enumerate(selected_idx):
-            batch_pred[i] = pred_uae_matrix[user_id]
-            sub_x[i, items_by_user_id] = 1
+        ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
+        recon_loss = squred_loss(batch_true/ppscore, batch_pred)
+        tmp_loss = batch_true * torch.square(batch_epoch_matrix - batch_pred)
 
-        sub_x = torch.LongTensor(sub_x).type(torch.float32).to(device)
-        pred, z = model(sub_x)
+        uae_loss = recon_loss + tmp_loss
+        uae_optimizer.zero_grad()
+        uae_loss.backward()
+        uae_optimizer.step()
 
+
+        loss.backward(retain_graph=True)
+
+    #IAE
+    total_batch = num_items // iae_batch_size
+    for idx in tqdm(range(total_batch)):
+        # mini-batch training
+        selected_idx = all_item_idx[iae_batch_size*idx : (idx+1)*iae_batch_size]
+
+        batch_true = train_iu_matrix[selected_idx]
+        batch_epoch_matrix = epoch_iae_matrix[selected_idx]
+        batch_pred, z = iae(batch_true)
+
+        ppscore = torch.clip(batch_pred, min=0.1, max=1.0)
+        recon_loss = squred_loss(batch_true/ppscore, batch_pred)
+        tmp_loss = torch.sum(batch_true * torch.square(batch_epoch_matrix - batch_pred))
+
+        iae_loss = recon_loss + tmp_loss
+        iae_optimizer.zero_grad()
+        iae_loss.backward()
+        iae_optimizer.step()
+
+
+        
         recon_loss = squred_loss(sub_x, pred)
         l2_reg = l2_loss(model) * l2_lambda
         total_loss = recon_loss + l2_reg
