@@ -107,3 +107,15 @@ pref_item_diff_ = torch.matmul(total_pos_interactions.T, total_neg_interactions)
 pref_item_diff = pref_item_diff_ * (np.ones_like(pref_item_diff_) - np.identity(num_items)*2)
 neg_item_samples = np.argmax(pref_item_diff, axis=-1) + 1
 np.save("./assets/neg_item_samples.npy", neg_item_samples, allow_pickle=True)
+
+#%% TOP k sampling
+k = 5
+
+pref_user_sim_ = torch.matmul(total_pos_interactions, total_pos_interactions.T).cpu().numpy()
+pref_user_sim = pref_user_sim_ * (np.ones_like(pref_user_sim_) - np.identity(num_users)*2)
+pref_user_topk = torch.topk(torch.tensor(pref_user_sim), 5).indices + 1
+
+pref_item_sim_ = torch.matmul(total_pos_interactions.T, total_pos_interactions).cpu().numpy()
+pref_item_sim = pref_item_sim_ * (np.ones_like(pref_item_sim_) - np.identity(num_items)*2)
+pref_item_topk = torch.topk(torch.tensor(pref_item_sim), 5).indices + 1
+
