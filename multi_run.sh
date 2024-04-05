@@ -2,15 +2,25 @@
 
 # python argparse source for experiments
 experiments=(
-"--lr 1e-4 --weight-decay 1e-4 --batch-size 64"
-"--lr 5e-5 --weight-decay 1e-4 --batch-size 64"
-"--lr 1e-5 --weight-decay 1e-4 --batch-size 64"
-"--lr 1e-4 --weight-decay 1e-4 --batch-size 128"
-"--lr 5e-5 --weight-decay 1e-4 --batch-size 128"
-"--lr 1e-5 --weight-decay 1e-4 --batch-size 128"
-"--lr 1e-4 --weight-decay 1e-4 --batch-size 256"
-"--lr 5e-5 --weight-decay 1e-4 --batch-size 256"
-"--lr 1e-5 --weight-decay 1e-4 --batch-size 256"
+"--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 256"
+"--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 256"
+"--lr 1e-4 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
+"--lr 1e-5 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
+"--lr 3e-5 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
+"--lr 1e-4 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
+"--lr 1e-5 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
+"--lr 3e-5 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
+# "--lr 3e-4 --weight-decay 1e-4 --batch-size 256"
+# "--lr 1e-5 --weight-decay 1e-3 --batch-size 256"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 128"
+# "--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 128"
+# "--lr 3e-4 --weight-decay 1e-4 --batch-size 128"
+# "--lr 1e-5 --weight-decay 1e-3 --batch-size 128"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 64"
+# "--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 64"
+# "--lr 3e-5 --weight-decay 1e-4 --batch-size 64"
+# "--lr 1e-5 --weight-decay 1e-3 --batch-size 64"
+# "--dataset-name yahoo_r3"
 )
 
 # default prefix of job name
@@ -32,6 +42,7 @@ ENV=/home1/wonhyung64/anaconda3/envs/openmmlab/bin/python3
 # file directory of experiment ".py"
 EXECUTION_FILE=/home1/wonhyung64/Github/DRS/yahoo_implicit.py                   #OURS
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf/yahoo_implicit.py   #NCF
+# EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/biser/yahoo_implicit.py   #biser
 
 # data directory for experiments
 DATA_DIR=/home1/wonhyung64/Github/DRS/data
