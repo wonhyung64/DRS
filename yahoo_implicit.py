@@ -69,6 +69,7 @@ parser.add_argument("--temperature", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
+parser.add_argument("--pos-topk", type=str, default=1)
 
 
 try:
