@@ -119,3 +119,5 @@ pref_item_sim_ = torch.matmul(total_pos_interactions.T, total_pos_interactions).
 pref_item_sim = pref_item_sim_ * (np.ones_like(pref_item_sim_) - np.identity(num_items)*2)
 pref_item_topk = torch.topk(torch.tensor(pref_item_sim), 5).indices + 1
 
+np.save("./assets/pos_user_topk.npy", pref_user_topk.numpy(), allow_pickle=True)
+np.save("./assets/pos_item_topk.npy", pref_item_topk.numpy(), allow_pickle=True)
