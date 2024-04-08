@@ -91,6 +91,7 @@ temperature = args.temperature
 data_dir = args.data_dir
 dataset_name = args.dataset_name
 contrast_pair = args.contrast_pair
+pos_topk = args.pos_topk
 
 
 if torch.cuda.is_available():
@@ -123,7 +124,8 @@ wandb_var = wandb.init(
         "random_seed" : random_seed,
         "temperature": temperature,
         "balance_param": balance_param,
-        "contrast_pair": contrast_pair
+        "contrast_pair": contrast_pair,
+        "pos_topk": pos_topk
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -156,15 +158,21 @@ x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
 train_user_indices = x_train.copy()[:, 0] - 1
-pos_user_samples_ = np.load("./assets/pos_user_samples.npy")
+pos_user_samples_ = np.load("./assets/pos_user_topk.npy")
+pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
+pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
 neg_user_samples_ = np.load("./assets/neg_user_samples.npy")
+
 pos_user_samples = pos_user_samples_[train_user_indices]
 neg_user_samples = neg_user_samples_[train_user_indices]
 user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
 
 train_item_indices = x_train.copy()[:, 1] - 1
-pos_item_samples_ = np.load("./assets/pos_item_samples.npy")
+pos_item_samples_ = np.load("./assets/pos_item_topk.npy")
+pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
+pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
 neg_item_samples_ = np.load("./assets/neg_item_samples.npy")
+
 pos_item_samples = pos_item_samples_[train_item_indices]
 neg_item_samples = neg_item_samples_[train_item_indices]
 item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
