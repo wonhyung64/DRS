@@ -114,3 +114,5 @@ np.save("./assets/ipw_pos_item_topk.npy", pref_item_topk.numpy(), allow_pickle=T
 
 np.save("./assets/ipw_neg_user_samples.npy", neg_user_samples, allow_pickle=True)
 np.save("./assets/ipw_neg_item_samples.npy", neg_item_samples, allow_pickle=True)
+
+# %%
