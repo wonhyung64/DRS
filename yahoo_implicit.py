@@ -218,12 +218,22 @@ loss_fcn = torch.nn.BCELoss()
 for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
-    epoch_loss = 0
     model.train()
 
+    epoch_total_loss = 0.
+    epoch_rec_loss = 0.
+    epoch_cl_loss = 0.
+
+    epoch_user_sim_loss = None
+    epoch_item_sim_loss = None
+
+    if contrast_pair in ["user", "both"]:
+        epoch_user_sim_loss = 0.
+    if contrast_pair in ["item", "both"]:
+        epoch_item_sim_loss = 0.
+
+
     for idx in range(total_batch):
-        user_sim_loss = None
-        item_sim_loss = None
 
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
@@ -235,6 +245,7 @@ for epoch in range(1, num_epochs+1):
 
         pred, anchor_user_embed, anchor_item_embed = model(org_x)
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        epoch_rec_loss += rec_loss
 
         pos_x = np.stack([user_pos_neg[selected_idx,0], item_pos_neg[selected_idx,0]], axis=-1)
         pos_x = torch.LongTensor(pos_x - 1).to(device)
@@ -243,41 +254,49 @@ for epoch in range(1, num_epochs+1):
         if contrast_pair == "user":
             user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
             cl_loss = user_sim_loss
+            epoch_user_sim_loss += user_sim_loss
+            epoch_cl_loss += cl_loss
             
         elif contrast_pair == "item":
             item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = item_sim_loss
+            epoch_item_sim_loss += item_sim_loss
+            epoch_cl_loss += cl_loss
 
         elif contrast_pair == "both":
             user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
             item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = (user_sim_loss + item_sim_loss)
+            epoch_user_sim_loss += user_sim_loss
+            epoch_item_sim_loss += item_sim_loss
+            epoch_cl_loss += cl_loss
 
         else: 
             raise ValueError("Unknown contrastive learning pair!")
 
         total_loss = rec_loss + cl_loss
-
-        loss_dict: dict = {
-            'rec_loss': float(rec_loss.item()),
-            'cl_loss': float(cl_loss.item()),
-            'total_loss': float(total_loss.item()),
-        }
-
-        if user_sim_loss != None:
-            loss_dict["user_sim_loss"] = float(user_sim_loss.item())
-        if item_sim_loss != None:
-            loss_dict["item_sim_loss"] = float(item_sim_loss.item())
-
-        wandb_var.log(loss_dict)
-
-        epoch_loss += total_loss
+        epoch_total_loss += total_loss
 
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
+
+    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
+
+    loss_dict: dict = {
+        'epoch_rec_loss': float(epoch_rec_loss.item()),
+        'epoch_cl_loss': float(epoch_cl_loss.item()),
+        'epoch_total_loss': float(epoch_total_loss.item()),
+    }
+
+    if epoch_user_sim_loss != None:
+        loss_dict["epoch_user_sim_loss"] = float(epoch_user_sim_loss.item())
+    if epoch_item_sim_loss != None:
+        loss_dict["epoch_item_sim_loss"] = float(epoch_item_sim_loss.item())
+
+    wandb_var.log(loss_dict)
+
 
     if epoch % evaluate_interval == 0:
         model.eval()
