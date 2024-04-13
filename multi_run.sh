@@ -2,24 +2,16 @@
 
 # python argparse source for experiments
 experiments=(
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 256"
-"--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 256"
-"--lr 1e-4 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
-"--lr 3e-5 --weight-decay 1e-4 --embedding-k 16 --batch-size 256"
-"--lr 1e-4 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
-"--lr 3e-5 --weight-decay 1e-4 --embedding-k 8 --batch-size 256"
-# "--lr 3e-4 --weight-decay 1e-4 --batch-size 256"
-# "--lr 1e-5 --weight-decay 1e-3 --batch-size 256"
-# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 128"
-# "--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 128"
-# "--lr 3e-4 --weight-decay 1e-4 --batch-size 128"
-# "--lr 1e-5 --weight-decay 1e-3 --batch-size 128"
-# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 64"
-# "--lr 3e-5 --weight-decay 1e-4 --embedding-k 32 --batch-size 64"
-# "--lr 3e-5 --weight-decay 1e-4 --batch-size 64"
-# "--lr 1e-5 --weight-decay 1e-3 --batch-size 64"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --pos-topk 3"
+"--lr 1e-5 --embedding-k 32 --batch-size 256 --pos-topk 3"
+# "--lr 1e-5 --weight-decay None --embedding-k 64 --batch-size 256 --pos-topk 3"
+# "--lr 1e-4 --weight-decay None --embedding-k 64 --batch-size 256 --pos-topk 3"
+# "--lr 1e-5 --weight-decay None --embedding-k 32 --batch-size 128 --pos-topk 3"
+# "--lr 1e-5 --weight-decay None --embedding-k 64 --batch-size 128 --pos-topk 3"
+# "--lr 1e-4 --weight-decay None --embedding-k 64 --batch-size 128 --pos-topk 3"
+# "--lr 1e-5 --weight-decay None --embedding-k 32 --batch-size 64 --pos-topk 3"
+# "--lr 1e-5 --weight-decay None --embedding-k 64 --batch-size 64 --pos-topk 3"
+# "--lr 1e-4 --weight-decay None --embedding-k 64 --batch-size 64 --pos-topk 3"
 # "--dataset-name yahoo_r3"
 )
 
@@ -49,7 +41,6 @@ DATA_DIR=/home1/wonhyung64/Github/DRS/data
 
 
 for index in ${!experiments[*]}; do
-    # echo --job-name=$DEFAULT_NAME$index ${DEVICES[0]} $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]} 
     sbatch --job-name=$DEFAULT_NAME$index ${DEVICES[2]} $RUN_SRC $ENV $EXECUTION_FILE --data-dir $DATA_DIR ${experiments[$index]} 
     sleep 1
 done

@@ -58,7 +58,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--embedding-k", type=int, default=64)
 parser.add_argument("--lr", type=float, default=1e-5)
-parser.add_argument("--weight-decay", type=float, default=1e-4)
+parser.add_argument("--weight-decay", type=float, default=0.)
 parser.add_argument("--batch-size", type=int, default=256)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
@@ -69,7 +69,7 @@ parser.add_argument("--temperature", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
-parser.add_argument("--pos-topk", type=str, default=1)
+parser.add_argument("--pos-topk", type=int, default=1)
 
 
 try:
