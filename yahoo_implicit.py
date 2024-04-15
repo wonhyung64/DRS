@@ -71,6 +71,7 @@ parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--pos-topk", type=int, default=1)
 parser.add_argument("--ipw-sampling", type=bool, default=True)
+parser.add_argument("--ipw-erm", type=bool, default=True)
 
 
 try:
@@ -94,6 +95,7 @@ dataset_name = args.dataset_name
 contrast_pair = args.contrast_pair
 pos_topk = args.pos_topk
 ipw_sampling = args.ipw_sampling
+ipw_erm = args.ipw_erm
 
 
 if torch.cuda.is_available():
@@ -129,6 +131,7 @@ wandb_var = wandb.init(
         "contrast_pair": contrast_pair,
         "pos_topk": pos_topk,
         "ipw_sampling": ipw_sampling,
+        "ipw_erm": ipw_erm,
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -244,7 +247,13 @@ for epoch in range(1, num_epochs+1):
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
         pred, anchor_user_embed, anchor_item_embed = model(org_x)
-        rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        pred = torch.nn.Sigmoid()(pred)
+        if ipw_erm:
+            ppscore = torch.clip(pred, min=0.1, max=1.0)
+            true = sub_y / ppscore
+            rec_loss = torch.mean(true * torch.square(1 - pred) + (1 - true) * torch.square(pred))
+        else:
+            rec_loss = loss_fcn(pred, sub_y)
         epoch_rec_loss += rec_loss
 
         pos_x = np.stack([user_pos_neg[selected_idx,0], item_pos_neg[selected_idx,0]], axis=-1)
