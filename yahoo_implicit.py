@@ -53,6 +53,18 @@ def triplet_loss(anchor_user_embed, pos_user_embed, neg_user_embed, dist='sqeucl
     return torch.mean(loss)
 
 
+def compute_sim_matrix(pos_interactions, k=5):
+    pref_user_sim_ = torch.matmul(pos_interactions, pos_interactions.T).cpu().numpy()
+    pref_user_sim = pref_user_sim_ * (np.ones_like(pref_user_sim_) - np.identity(num_users)*2)
+    pref_user_topk = torch.topk(torch.tensor(pref_user_sim), k).indices + 1
+
+    pref_item_sim_ = torch.matmul(pos_interactions.T, pos_interactions).cpu().numpy()
+    pref_item_sim = pref_item_sim_ * (np.ones_like(pref_item_sim_) - np.identity(num_items)*2)
+    pref_item_topk = torch.topk(torch.tensor(pref_item_sim), k).indices + 1
+
+    return pref_user_topk, pref_item_topk
+
+
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
@@ -72,6 +84,7 @@ parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--pos-topk", type=int, default=1)
 parser.add_argument("--ipw-sampling", type=bool, default=True)
 parser.add_argument("--ipw-erm", type=bool, default=True)
+parser.add_argument("--pref-update-interval", type=int, default=20)
 
 
 try:
@@ -96,6 +109,7 @@ contrast_pair = args.contrast_pair
 pos_topk = args.pos_topk
 ipw_sampling = args.ipw_sampling
 ipw_erm = args.ipw_erm
+pref_update_interval = args.pref_update_interval
 
 
 if torch.cuda.is_available():
@@ -132,6 +146,7 @@ wandb_var = wandb.init(
         "pos_topk": pos_topk,
         "ipw_sampling": ipw_sampling,
         "ipw_erm": ipw_erm,
+        "pref_update_interval": pref_update_interval,
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -163,51 +178,58 @@ print("[test]  num data:", x_test.shape[0])
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
-"""USER PAIRS"""
-train_user_indices = x_train.copy()[:, 0] - 1
-if ipw_sampling:
-    pos_user_samples_ = np.load("./assets/ipw_pos_user_topk.npy")
-    neg_user_samples_ = np.load("./assets/ipw_neg_user_samples.npy")
-else:
-    pos_user_samples_ = np.load("./assets/pos_user_topk.npy")
-    neg_user_samples_ = np.load("./assets/neg_user_samples.npy")
-
-pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
-pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
-
-pos_user_samples = pos_user_samples_[train_user_indices]
-neg_user_samples = neg_user_samples_[train_user_indices]
-user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
-
-"""ITEM PAIRS"""
-train_item_indices = x_train.copy()[:, 1] - 1
-if ipw_sampling:
-    pos_item_samples_ = np.load("./assets/ipw_pos_item_topk.npy")
-    neg_item_samples_ = np.load("./assets/ipw_neg_item_samples.npy")
-else:
-    pos_item_samples_ = np.load("./assets/pos_item_topk.npy")
-    neg_item_samples_ = np.load("./assets/neg_item_samples.npy")
-
-pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
-pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
-
-pos_item_samples = pos_item_samples_[train_item_indices]
-neg_item_samples = neg_item_samples_[train_item_indices]
-item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
-
-total_samples = np.concatenate([x_train, user_pos_neg, item_pos_neg], axis=-1)
-total_samples, y_train = shuffle(total_samples, y_train)
-x_train, user_pos_neg, item_pos_neg = total_samples[:,0:2], total_samples[:,2:4], total_samples[:,4:6]
-
-num_users = x_train[:,0].max()
-num_items = x_train[:,1].max()
-print("# user: {}, # item: {}".format(num_users, num_items))
-
 y_train = binarize(y_train)
 y_test = binarize(y_test)
 
 num_sample = len(x_train)
 total_batch = num_sample // batch_size
+
+num_users = x_train[:,0].max()
+num_items = x_train[:,1].max()
+print("# user: {}, # item: {}".format(num_users, num_items))
+
+
+"""INTERACTION MATRIX"""
+pos_interactions = torch.tensor(np.load("./assets/pos_interactions.npy")).to(device)
+neg_interactions = torch.tensor(np.load("./assets/neg_interactions.npy")).to(device)
+
+if ipw_sampling:
+    popularity = pos_interactions.sum(dim=0) / num_users
+    init_pos_interactions = pos_interactions / popularity
+else:
+    init_pos_interactions = pos_interactions
+
+pos_user_samples_, pos_item_samples_ = compute_sim_matrix(init_pos_interactions)
+neg_user_samples_, neg_item_samples_ = compute_sim_matrix(neg_interactions)
+
+
+"""USER PAIRS"""
+train_user_indices = x_train.copy()[:, 0] - 1
+pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
+pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
+
+neg_user_indices = np.random.randint(low=0, high=1, size=len(neg_user_samples_))
+neg_user_samples_ = np.array([neg_user_samples_[:,:1][i, neg_user_indices[i]] for i in range(len(neg_user_indices))])
+
+
+"""ITEM PAIRS"""
+train_item_indices = x_train.copy()[:, 1] - 1
+
+pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
+pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
+
+neg_item_indices = np.random.randint(low=0, high=1, size=len(neg_item_samples_))
+neg_item_samples_ = np.array([neg_item_samples_[:,:1][i, neg_item_indices[i]] for i in range(len(neg_item_indices))])
+
+
+"""PAIR CONSTRUCTION"""
+pos_user_samples = pos_user_samples_[train_user_indices]
+neg_user_samples = neg_user_samples_[train_user_indices]
+user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
+
+pos_item_samples = pos_item_samples_[train_item_indices]
+neg_item_samples = neg_item_samples_[train_item_indices]
+item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
 
 
 #%% TRAIN INITIAILIZE
@@ -248,6 +270,7 @@ for epoch in range(1, num_epochs+1):
 
         pred, anchor_user_embed, anchor_item_embed = model(org_x)
         pred = torch.nn.Sigmoid()(pred)
+
         if ipw_erm:
             ppscore = torch.clip(pred, min=0.1, max=1.0)
             true = sub_y / ppscore
@@ -316,4 +339,35 @@ for epoch in range(1, num_epochs+1):
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
         wandb_var.log(ndcg_dict)
 
+    if epoch % pref_update_interval == 0:
+
+        propensity_score = []
+        for u in range(num_users):
+            with torch.no_grad():
+                u_items = torch.LongTensor(np.array([np.ones(num_items)*u, np.arange(num_items)])).T.to(device)
+                propensity_u, _, __ = model(u_items)
+                propensity_u = torch.nn.Sigmoid()(propensity_u)
+                propensity_score.append(propensity_u)
+        propensity_score = torch.concat(propensity_score, dim=-1).T
+
+        weighted_pos_interactions = pos_interactions / propensity_score
+        pos_user_samples_, pos_item_samples_ = compute_sim_matrix(weighted_pos_interactions)
+
+        """USER PAIRS"""
+        pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
+        pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
+
+        """ITEM PAIRS"""
+        pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
+        pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
+
+        """PAIR CONSTRUCTION"""
+        pos_user_samples = pos_user_samples_[train_user_indices]
+        user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
+
+        pos_item_samples = pos_item_samples_[train_item_indices]
+        item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
+
 wandb.finish()
+
+# %%
