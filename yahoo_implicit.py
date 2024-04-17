@@ -83,8 +83,8 @@ parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--pos-topk", type=int, default=1)
 parser.add_argument("--ipw-sampling", type=bool, default=True)
-parser.add_argument("--ipw-erm", type=bool, default=True)
-parser.add_argument("--pref-update-interval", type=int, default=20)
+parser.add_argument("--ipw-erm", type=bool, default=False)
+parser.add_argument("--pref-update-interval", type=int, default=9999)
 
 
 try:
