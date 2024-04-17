@@ -70,8 +70,8 @@ def hard_contrastive_loss(anchor_embed, aug_embed, scale=1.):
     device = anchor_embed.device
     anchor_embed = F.normalize(anchor_embed, p=2, dim=1)
     aug_embed = F.normalize(aug_embed, p=2, dim=1)
-    simlarity = (anchor_user_embed.unsqueeze(1) * aug_embed).sum(-1) / scale
-    target = torch.LongTensor(torch.zeros(batch_size, dtype=torch.int)).to(device)
+    simlarity = (anchor_embed.unsqueeze(1) * aug_embed).sum(-1) / scale
+    target = torch.LongTensor(np.zeros(batch_size)).to(device)
 
     return torch.nn.functional.cross_entropy(simlarity, target)
 
