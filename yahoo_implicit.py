@@ -68,13 +68,12 @@ def compute_sim_matrix(pos_interactions, k=5):
 def hard_contrastive_loss(anchor_embed, aug_embed, scale=1.):
     batch_size = anchor_embed.shape[0]
     device = anchor_embed.device
-
     anchor_embed = F.normalize(anchor_embed, p=2, dim=1)
     aug_embed = F.normalize(aug_embed, p=2, dim=1)
     simlarity = (anchor_user_embed.unsqueeze(1) * aug_embed).sum(-1) / scale
-    loss = torch.nn.functional.cross_entropy(simlarity, torch.zeros(batch_size, dtype=torch.int).to(device))
+    target = torch.LongTensor(torch.zeros(batch_size, dtype=torch.int)).to(device)
 
-    return loss
+    return torch.nn.functional.cross_entropy(simlarity, target)
 
 
 #%% SETTINGS
