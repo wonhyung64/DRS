@@ -383,22 +383,19 @@ for epoch in range(1, num_epochs+1):
         propensity_score = torch.concat(propensity_score, dim=-1).T
 
         weighted_pos_interactions = pos_interactions / propensity_score
-        pos_user_samples_, pos_item_samples_ = compute_sim_matrix(weighted_pos_interactions)
+        pos_user_topk_, pos_item_topk_ = compute_sim_matrix(weighted_pos_interactions)
 
         """USER PAIRS"""
-        pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
-        pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
+        pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_topk_))
+        pos_user_top1_ = np.array([pos_user_topk_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
 
         """ITEM PAIRS"""
-        pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
-        pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
+        pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_topk_))
+        pos_item_top1_ = np.array([pos_item_topk_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
 
-        """PAIR CONSTRUCTION"""
-        pos_user_samples = pos_user_samples_[train_user_indices]
-        user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
-
-        pos_item_samples = pos_item_samples_[train_item_indices]
-        item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
+        """POSITIVE"""
+        pos_user_top1 = pos_user_top1_[train_user_indices]
+        pos_item_top1 = pos_item_top1_[train_item_indices]
 
 wandb.finish()
 
