@@ -65,6 +65,18 @@ def compute_sim_matrix(pos_interactions, k=5):
     return pref_user_topk, pref_item_topk
 
 
+def hard_contrastive_loss(anchor_embed, aug_embed, scale=1.):
+    batch_size = anchor_embed.shape[0]
+    device = anchor_embed.device
+
+    anchor_embed = F.normalize(anchor_embed, p=2, dim=1)
+    aug_embed = F.normalize(aug_embed, p=2, dim=1)
+    simlarity = (anchor_user_embed.unsqueeze(1) * aug_embed).sum(-1) / scale
+    loss = torch.nn.functional.cross_entropy(simlarity, torch.zeros(batch_size, dtype=torch.int).to(device))
+
+    return loss
+
+
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
@@ -82,9 +94,10 @@ parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--pos-topk", type=int, default=1)
+parser.add_argument("--neg-topk", type=int, default=5)
 parser.add_argument("--ipw-sampling", type=bool, default=True)
 parser.add_argument("--ipw-erm", type=bool, default=False)
-parser.add_argument("--pref-update-interval", type=int, default=9999)
+parser.add_argument("--pref-update-interval", type=int, default=25)
 
 
 try:
@@ -110,6 +123,7 @@ pos_topk = args.pos_topk
 ipw_sampling = args.ipw_sampling
 ipw_erm = args.ipw_erm
 pref_update_interval = args.pref_update_interval
+neg_topk = args.neg_topk
 
 
 if torch.cuda.is_available():
@@ -147,6 +161,7 @@ wandb_var = wandb.init(
         "ipw_sampling": ipw_sampling,
         "ipw_erm": ipw_erm,
         "pref_update_interval": pref_update_interval,
+        "neg_topk": neg_topk,
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -191,7 +206,6 @@ print("# user: {}, # item: {}".format(num_users, num_items))
 
 """INTERACTION MATRIX"""
 pos_interactions = torch.tensor(np.load("./assets/pos_interactions.npy")).to(device)
-neg_interactions = torch.tensor(np.load("./assets/neg_interactions.npy")).to(device)
 
 if ipw_sampling:
     popularity = pos_interactions.sum(dim=0) / num_users
@@ -199,37 +213,29 @@ if ipw_sampling:
 else:
     init_pos_interactions = pos_interactions
 
-pos_user_samples_, pos_item_samples_ = compute_sim_matrix(init_pos_interactions)
-neg_user_samples_, neg_item_samples_ = compute_sim_matrix(neg_interactions)
+pos_user_topk_, pos_item_topk_ = compute_sim_matrix(init_pos_interactions)
 
 
 """USER PAIRS"""
 train_user_indices = x_train.copy()[:, 0] - 1
-pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_samples_))
-pos_user_samples_ = np.array([pos_user_samples_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
-
-neg_user_indices = np.random.randint(low=0, high=1, size=len(neg_user_samples_))
-neg_user_samples_ = np.array([neg_user_samples_[:,:1][i, neg_user_indices[i]] for i in range(len(neg_user_indices))])
-
+pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_topk_))
+pos_user_top1_ = np.array([pos_user_topk_[:,:pos_topk][i, pos_user_indices[i]] for i in range(len(pos_user_indices))])
 
 """ITEM PAIRS"""
 train_item_indices = x_train.copy()[:, 1] - 1
+pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_topk_))
+pos_item_top1_ = np.array([pos_item_topk_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
 
-pos_item_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_item_samples_))
-pos_item_samples_ = np.array([pos_item_samples_[:,:pos_topk][i, pos_item_indices[i]] for i in range(len(pos_item_indices))])
+"""POSITIVE"""
+pos_user_top1 = pos_user_top1_[train_user_indices]
+pos_item_top1 = pos_item_top1_[train_item_indices]
 
-neg_item_indices = np.random.randint(low=0, high=1, size=len(neg_item_samples_))
-neg_item_samples_ = np.array([neg_item_samples_[:,:1][i, neg_item_indices[i]] for i in range(len(neg_item_indices))])
-
-
-"""PAIR CONSTRUCTION"""
-pos_user_samples = pos_user_samples_[train_user_indices]
-neg_user_samples = neg_user_samples_[train_user_indices]
-user_pos_neg = np.stack([pos_user_samples, neg_user_samples], axis=-1)
-
-pos_item_samples = pos_item_samples_[train_item_indices]
-neg_item_samples = neg_item_samples_[train_item_indices]
-item_pos_neg = np.stack([pos_item_samples, neg_item_samples], axis=-1)
+"""HARD NEGATIVES"""
+if neg_topk:
+    neg_interactions = torch.tensor(np.load("./assets/neg_interactions.npy")).to(device)
+    neg_user_topk_, neg_item_topk_ = compute_sim_matrix(neg_interactions, k=neg_topk)
+    neg_user_topk = neg_user_topk_[train_user_indices]
+    neg_item_topk = neg_item_topk_[train_item_indices]
 
 
 #%% TRAIN INITIAILIZE
@@ -279,25 +285,52 @@ for epoch in range(1, num_epochs+1):
             rec_loss = loss_fcn(pred, sub_y)
         epoch_rec_loss += rec_loss
 
-        pos_x = np.stack([user_pos_neg[selected_idx,0], item_pos_neg[selected_idx,0]], axis=-1)
+        pos_x = np.stack([pos_user_top1[selected_idx], pos_item_top1[selected_idx]], axis=-1)
         pos_x = torch.LongTensor(pos_x - 1).to(device)
         _, pos_user_embed, pos_item_embed = model(pos_x)
 
+        if neg_topk:
+            neg_x_user = neg_user_topk[selected_idx].flatten()
+            neg_x_item = neg_item_topk[selected_idx].flatten()
+            neg_x = np.stack([neg_x_user, neg_x_item], axis=-1)
+            neg_x = torch.LongTensor(neg_x - 1).to(device)
+            _, neg_user_embed, neg_item_embed = model(neg_x)
+
+            aug_user_embed = torch.cat([
+                pos_user_embed.reshape(batch_size, 1, embedding_k),
+                neg_user_embed.reshape(batch_size, neg_topk, embedding_k),
+            ], dim=1)
+
+            aug_item_embed = torch.cat([
+                pos_item_embed.reshape(batch_size, 1, embedding_k),
+                neg_item_embed.reshape(batch_size, neg_topk, embedding_k),
+            ], dim=1)
+
         if contrast_pair == "user":
-            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
+            if neg_topk:
+                user_sim_loss = hard_contrastive_loss(anchor_user_embed, aug_user_embed, temperature) * balance_param
+            else:
+                user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
             cl_loss = user_sim_loss
             epoch_user_sim_loss += user_sim_loss
             epoch_cl_loss += cl_loss
             
         elif contrast_pair == "item":
-            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
+            if neg_topk:
+                item_sim_loss = hard_contrastive_loss(anchor_item_embed, aug_item_embed, temperature) * balance_param
+            else:
+                item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = item_sim_loss
             epoch_item_sim_loss += item_sim_loss
             epoch_cl_loss += cl_loss
 
         elif contrast_pair == "both":
-            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
-            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
+            if neg_topk:
+                user_sim_loss = hard_contrastive_loss(anchor_user_embed, aug_user_embed, temperature) * balance_param
+                item_sim_loss = hard_contrastive_loss(anchor_item_embed, aug_item_embed, temperature) * balance_param
+            else:
+                user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
+                item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = (user_sim_loss + item_sim_loss)
             epoch_user_sim_loss += user_sim_loss
             epoch_item_sim_loss += item_sim_loss

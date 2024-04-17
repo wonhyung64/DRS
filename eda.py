@@ -9,14 +9,7 @@ import matplotlib.pyplot as plt
 
 # %%
 data_dir = "./data"
-
-os.listdir(f"{data_dir}/yahoo_r3")
-
 train_dir = f"{data_dir}/yahoo_r3/ydata-ymusic-rating-study-v1_0-train.txt"
-
-with open(train_dir, "r") as f:
-    train_raw = f.readlines()
-
 
 #%% popularity bias in yahoo r3
 dataset_path = "/root/won/DRS/data/yahoo_r3/implicit"
