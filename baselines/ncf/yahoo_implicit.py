@@ -108,17 +108,15 @@ print("[test]  num data:", x_test.shape[0])
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
-
-x_train, y_train = shuffle(x_train, y_train)
-num_users = x_train[:,0].max()
-num_items = x_train[:,1].max()
-print("# user: {}, # item: {}".format(num_users, num_items))
-
 y_train = binarize(y_train)
 y_test = binarize(y_test)
 
 num_sample = len(x_train)
 total_batch = num_sample // batch_size
+
+num_users = x_train[:,0].max()
+num_items = x_train[:,1].max()
+print("# user: {}, # item: {}".format(num_users, num_items))
 
 
 #%% TRAIN
@@ -130,8 +128,10 @@ loss_fcn = torch.nn.BCELoss()
 for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
-    epoch_loss = 0
     model.train()
+
+    epoch_total_loss = 0.
+    epoch_rec_loss = 0.
 
     for idx in range(total_batch):
 
@@ -145,19 +145,23 @@ for epoch in range(1, num_epochs+1):
         pred, user_embed, item_embed = model(sub_x)
 
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        epoch_rec_loss = rec_loss
 
-        loss_dict: dict = {
-            'rec_loss': float(rec_loss.item()),
-        }
-        wandb_var.log(loss_dict)
-
-        epoch_loss += rec_loss
+        total_loss = rec_loss
+        epoch_total_loss += total_loss
 
         optimizer.zero_grad()
-        rec_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
-    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_loss.item():.4f}")
+    print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
+
+    loss_dict: dict = {
+        'epoch_rec_loss': float(epoch_rec_loss.item()),
+        'epoch_total_loss': float(epoch_total_loss.item()),
+    }
+
+    wandb_var.log(loss_dict)
 
     if epoch % evaluate_interval == 0:
         model.eval()
