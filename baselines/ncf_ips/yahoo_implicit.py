@@ -142,8 +142,6 @@ num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
 
-x_all = generate_total_sample(num_users, num_items)
-
 
 #%% TRAIN
 model = NCF(num_users, num_items, embedding_k)
