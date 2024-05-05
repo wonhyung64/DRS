@@ -145,7 +145,7 @@ for epoch in range(1, num_epochs+1):
         pred, user_embed, item_embed = model(sub_x)
 
         rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
-        epoch_rec_loss = rec_loss
+        epoch_rec_loss += rec_loss
 
         total_loss = rec_loss
         epoch_total_loss += total_loss
