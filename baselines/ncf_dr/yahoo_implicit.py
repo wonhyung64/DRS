@@ -1,14 +1,16 @@
+#%%
 import os
 import sys
 import torch
 import argparse
 import subprocess
 import numpy as np
+import torch.nn.functional as F
 from datetime import datetime
 
 from model import NCF
 from metric import ndcg_func
-from utils import binarize, shuffle
+from utils import binarize
 
 try:
     import wandb
@@ -17,12 +19,42 @@ except:
     import wandb
 
 
+def generate_total_sample(num_users, num_items):
+    sample = []
+    for i in range(num_users):
+        sample.extend([[i,j] for j in range(num_items)])
+
+    return np.array(sample)
+
+
+def estimate_ips_bayes(x, y, y_ips=None):
+    if y_ips is None:
+        one_over_zl = np.ones(len(y))
+    else:
+        prob_y1 = y_ips.sum() / len(y_ips)
+        prob_y0 = 1 - prob_y1
+        prob_o1 = len(x) / (x[:,0].max() * x[:,1].max())
+        prob_y1_given_o1 = y.sum() / len(y)
+        prob_y0_given_o1 = 1 - prob_y1_given_o1
+
+        propensity = np.zeros(len(y))
+
+        propensity[y == 0] = (prob_y0_given_o1 * prob_o1) / prob_y0
+        propensity[y == 1] = (prob_y1_given_o1 * prob_o1) / prob_y1
+        one_over_zl = 1 / propensity
+
+    one_over_zl = torch.Tensor(one_over_zl)
+
+    return one_over_zl
+
+
+
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--embedding-k", type=int, default=64)
-parser.add_argument("--lr", type=float, default=1e-3)
-parser.add_argument("--weight-decay", type=float, default=1e-4)
+parser.add_argument("--lr", type=float, default=0.05)
+parser.add_argument("--weight-decay", type=float, default=0.)
 parser.add_argument("--batch-size", type=int, default=2048)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
@@ -79,7 +111,7 @@ wandb_var = wandb.init(
         "random_seed" : random_seed,
     }
 )
-wandb.run.name = f"ncf_{expt_num}"
+wandb.run.name = f"ncf_ips_{expt_num}"
 
 
 #%% DATA LOADER
@@ -118,12 +150,21 @@ num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
 
+x_all = generate_total_sample(num_users, num_items)
+
 
 #%% TRAIN
 model = NCF(num_users, num_items, embedding_k)
 model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-loss_fcn = torch.nn.BCELoss()
+loss_fcn = lambda x, y, z: F.binary_cross_entropy(x, y, z)
+loss__ = torch.nn.BCELoss()
+
+ips_idxs = np.arange(len(y_test))
+np.random.shuffle(ips_idxs)
+y_ips = y_test[ips_idxs[:int(0.05 * len(ips_idxs))]]
+
+one_over_zl = estimate_ips_bayes(x_train, y_train, y_ips)
 
 for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
@@ -131,7 +172,7 @@ for epoch in range(1, num_epochs+1):
     model.train()
 
     epoch_total_loss = 0.
-    epoch_rec_loss = 0.
+    epoch_ips_loss = 0.
 
     for idx in range(total_batch):
 
@@ -143,11 +184,13 @@ for epoch in range(1, num_epochs+1):
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
         pred, user_embed, item_embed = model(sub_x)
+        inv_prop = one_over_zl[selected_idx].to(device)
 
-        rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
-        epoch_rec_loss = rec_loss
+        ips_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, inv_prop)
 
-        total_loss = rec_loss
+        epoch_ips_loss += ips_loss
+
+        total_loss = ips_loss
         epoch_total_loss += total_loss
 
         optimizer.zero_grad()
@@ -157,7 +200,7 @@ for epoch in range(1, num_epochs+1):
     print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
 
     loss_dict: dict = {
-        'epoch_rec_loss': float(epoch_rec_loss.item()),
+        'epoch_ips_loss': float(epoch_ips_loss.item()),
         'epoch_total_loss': float(epoch_total_loss.item()),
     }
 
