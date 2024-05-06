@@ -42,7 +42,7 @@ def estimate_ips_bayes(x, y, y_ips=None):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--embedding-k", type=int, default=4)
+parser.add_argument("--embedding-k", type=int, default=64)
 parser.add_argument("--lr", type=float, default=1e-2)
 parser.add_argument("--weight-decay", type=float, default=1e-4)
 parser.add_argument("--batch-size", type=int, default=2048)
