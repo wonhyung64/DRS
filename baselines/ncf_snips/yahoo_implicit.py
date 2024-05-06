@@ -174,7 +174,7 @@ for epoch in range(1, num_epochs+1):
         inv_prop = one_over_zl[selected_idx].to(device)
         sum_inv_prop = torch.sum(inv_prop)
 
-        snips_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, inv_prop) / sum_inv_prop
+        snips_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, inv_prop.unsqueeze(-1)) / sum_inv_prop
 
         epoch_snips_loss += snips_loss
 
