@@ -224,9 +224,9 @@ for epoch in range(1, num_epochs+1):
         with torch.no_grad():
             pred, user_embed, item_embed = model(sub_x)
 
-        true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred.detach()), sub_y, None)
+        true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
 
-        imputation_loss = ((imputation - true_impute_error)**2 * inv_prop).sum()
+        imputation_loss = ((imputation - true_impute_error)**2 * inv_prop).mean()
         epoch_imputation_loss += imputation_loss
 
         optimizer_impute.zero_grad()
