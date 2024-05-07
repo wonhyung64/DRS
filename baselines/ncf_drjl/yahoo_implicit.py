@@ -251,7 +251,7 @@ for epoch in range(1, num_epochs+1):
 
         true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
 
-        dr_loss = ((true_impute_error - imputation.detach())* sub_o * inv_prop + imputation).mean()
+        dr_loss = ((true_impute_error - imputation.detach())* sub_o * inv_prop + imputation.detach()).mean()
         epoch_dr_loss += dr_loss
 
         optimizer.zero_grad()
