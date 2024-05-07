@@ -221,9 +221,10 @@ for epoch in range(1, num_epochs+1):
         inv_prop = one_over_zl[selected_idx].unsqueeze(-1).to(device)
 
         imputation, _, __ = imputator(sub_x)
-        pred, user_embed, item_embed = model(sub_x)
+        with torch.no_grad():
+            pred, user_embed, item_embed = model(sub_x)
 
-        true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred).detach(), sub_y, None)
+        true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred.detach()), sub_y, None)
 
         imputation_loss = ((imputation - true_impute_error)**2 * inv_prop).sum()
         epoch_imputation_loss += imputation_loss
@@ -246,7 +247,8 @@ for epoch in range(1, num_epochs+1):
 
         inv_prop = all_one_over_zl[selected_idx].unsqueeze(-1).to(device)
 
-        imputation, _, __ = imputator(sub_x)
+        with torch.no_grad():
+            imputation, _, __ = imputator(sub_x)
         pred, user_embed, item_embed = model(sub_x)
 
         true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
