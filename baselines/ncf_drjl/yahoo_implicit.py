@@ -6,6 +6,8 @@ import argparse
 import subprocess
 import numpy as np
 import torch.nn.functional as F
+
+from scipy import sparse
 from datetime import datetime
 
 from model import NCF
@@ -27,7 +29,7 @@ def generate_total_sample(num_users, num_items):
     return np.array(sample)
 
 
-def estimate_ips_bayes(x, y, y_ips=None):
+def estimate_ips_bayes(x, y, y_ips=None, with_ps=False):
     if y_ips is None:
         one_over_zl = np.ones(len(y))
     else:
@@ -38,12 +40,17 @@ def estimate_ips_bayes(x, y, y_ips=None):
         prob_y0_given_o1 = 1 - prob_y1_given_o1
 
         propensity = np.zeros(len(y))
+        propensity_0 = (prob_y0_given_o1 * prob_o1) / prob_y0
+        propensity_1 = (prob_y1_given_o1 * prob_o1) / prob_y1
 
-        propensity[y == 0] = (prob_y0_given_o1 * prob_o1) / prob_y0
-        propensity[y == 1] = (prob_y1_given_o1 * prob_o1) / prob_y1
+        propensity[y == 0] = propensity_0
+        propensity[y == 1] = propensity_1
         one_over_zl = 1 / propensity
 
     one_over_zl = torch.Tensor(one_over_zl)
+
+    if with_ps:
+        return one_over_zl, propensity_0, propensity_1
 
     return one_over_zl
 
@@ -150,7 +157,21 @@ num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
 
-# x_all = generate_total_sample(num_users, num_items)
+
+rating_matrix = sparse.lil_matrix((num_users, num_items))
+for (u, i, r) in np.concatenate([x_train, np.expand_dims(y_train, -1)], axis=-1):
+    if r:
+        rating_matrix[int(u)-1, int(i)-1] = r
+rating_train = sparse.csr_matrix(rating_matrix)
+
+click_matrix = sparse.lil_matrix((num_users, num_items))
+for (u, i) in x_train:
+    click_matrix[int(u)-1, int(i)-1] = 1
+click_train = sparse.csr_matrix(click_matrix)
+
+x_all = generate_total_sample(num_users, num_items)
+y_all = np.array([rating_matrix[u-1,i-1] for (u,i) in x_all])
+o_all = np.array([click_matrix[u-1,i-1] for (u,i) in x_all])
 
 
 #%% TRAIN
@@ -168,15 +189,17 @@ loss_fcn = lambda x, y, z: F.binary_cross_entropy(x, y, z, reduction="none")
 ips_idxs = np.arange(len(y_test))
 np.random.shuffle(ips_idxs)
 y_ips = y_test[ips_idxs[:int(0.05 * len(ips_idxs))]]
-# prior_y = y_ips.mean()
-one_over_zl = estimate_ips_bayes(x_train, y_train, y_ips)
+
+one_over_zl, propensity_0, propensity_1 = estimate_ips_bayes(x_train, y_train, y_ips, with_ps=True)
+all_one_over_zl = torch.Tensor([1/propensity_1 if y_ else 1/propensity_0 for y_ in y_all])
+
 
 for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
 
-    # ul_idxs = np.arange(x_all.shape[0])
-    # np.random.shuffle(ul_idxs)
+    ul_idxs = np.arange(x_all.shape[0])
+    np.random.shuffle(ul_idxs)
 
     model.train()
     imputator.train()
@@ -185,9 +208,9 @@ for epoch in range(1, num_epochs+1):
     epoch_dr_loss = 0.
     epoch_imputation_loss = 0.
 
-    '''Imputation Learning'''
     for idx in range(total_batch):
 
+        '''Imputation Learning'''
         # mini-batch training
         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
         sub_x = x_train[selected_idx]
@@ -195,39 +218,40 @@ for epoch in range(1, num_epochs+1):
         sub_y = y_train[selected_idx]
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        inv_prop = one_over_zl[selected_idx].to(device)
+        inv_prop = one_over_zl[selected_idx].unsqueeze(-1).to(device)
 
         imputation, _, __ = imputator(sub_x)
         pred, user_embed, item_embed = model(sub_x)
 
         true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred).detach(), sub_y, None)
 
-        imputation_loss = ((imputation - true_impute_error)**2 * sub_y * inv_prop).sum()
+        imputation_loss = ((imputation - true_impute_error)**2 * inv_prop).sum()
         epoch_imputation_loss += imputation_loss
 
         optimizer_impute.zero_grad()
         imputation_loss.backward()
         optimizer_impute.step()
 
-    np.random.shuffle(all_idx)
-    '''DR learning'''
-    for idx in range(total_batch):
 
+        '''DR learning'''
         # mini-batch training
-        selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
-        sub_x = x_train[selected_idx]
-        sub_x = torch.LongTensor(sub_x - 1).to(device)
-        sub_y = y_train[selected_idx]
-        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
+        selected_idx = ul_idxs[batch_size*idx:(idx+1)*batch_size]
+        sub_x = x_all[selected_idx]
+        sub_y = y_all[selected_idx]
+        sub_o = o_all[selected_idx]
 
-        inv_prop = one_over_zl[selected_idx].to(device)
+        sub_x = torch.LongTensor(sub_x - 1).to(device)
+        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
+        sub_o = torch.Tensor(sub_o).unsqueeze(-1).to(device)
+
+        inv_prop = all_one_over_zl[selected_idx].unsqueeze(-1).to(device)
 
         imputation, _, __ = imputator(sub_x)
         pred, user_embed, item_embed = model(sub_x)
 
         true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
 
-        dr_loss = ((true_impute_error - imputation.detach())* sub_y * inv_prop + imputation).mean()
+        dr_loss = ((true_impute_error - imputation.detach())* sub_o * inv_prop + imputation).mean()
         epoch_dr_loss += dr_loss
 
         optimizer.zero_grad()
