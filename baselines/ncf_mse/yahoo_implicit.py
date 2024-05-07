@@ -196,7 +196,7 @@ loss_fcn = lambda x, y, z: F.binary_cross_entropy(x, y, z, reduction="sum")
 # one_over_zl, propensity_0, propensity_1 = estimate_ips_bayes(x_train, y_train, y_ips, with_ps=True)
 # all_one_over_zl = torch.Tensor([1/propensity_1 if y_ else 1/propensity_0 for y_ in y_all])
 
-for epoch in range(1, num_epochs+1):break
+for epoch in range(1, num_epochs+1):
     all_idx = np.arange(num_sample)
     np.random.shuffle(all_idx)
 
