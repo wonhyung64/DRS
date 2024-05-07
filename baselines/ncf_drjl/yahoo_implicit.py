@@ -251,9 +251,10 @@ for epoch in range(1, num_epochs+1):
             imputation, _, __ = imputator(sub_x)
         pred, user_embed, item_embed = model(sub_x)
 
-        true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
+        # true_impute_error = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, None)
+        true_impute_error = F.binary_cross_entropy(torch.nn.Sigmoid()(pred), sub_y, reduction="none")
 
-        dr_loss = ((true_impute_error - imputation.detach())* sub_o * inv_prop + imputation.detach()).mean()
+        dr_loss = ((true_impute_error - imputation)* sub_o * inv_prop + imputation).mean()
         epoch_dr_loss += dr_loss
 
         optimizer.zero_grad()
