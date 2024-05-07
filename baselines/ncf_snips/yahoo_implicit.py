@@ -171,10 +171,10 @@ for epoch in range(1, num_epochs+1):
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
         pred, user_embed, item_embed = model(sub_x)
-        inv_prop = one_over_zl[selected_idx].to(device)
+        inv_prop = one_over_zl[selected_idx].unsqueeze(-1).to(device)
         sum_inv_prop = torch.sum(inv_prop)
 
-        snips_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, inv_prop.unsqueeze(-1)) / sum_inv_prop
+        snips_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y, inv_prop) / sum_inv_prop
 
         epoch_snips_loss += snips_loss
 
