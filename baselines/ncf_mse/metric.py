@@ -14,7 +14,7 @@ def ndcg_func(model, x_test, y_test, device, top_k_list):
         u_idx = all_tr_idx[x_test[:,0] == uid]
         x_u = torch.LongTensor(x_test[u_idx]-1).to(device)
         y_u = y_test[u_idx]
-        pred_, _, _ = model(x_u)
+        pred_, _ = model(x_u)
         pred = pred_.flatten().cpu().detach()
         
 

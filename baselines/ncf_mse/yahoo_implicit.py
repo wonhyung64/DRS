@@ -59,8 +59,8 @@ def estimate_ips_bayes(x, y, y_ips=None, with_ps=False):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--embedding-k", type=int, default=4)
-parser.add_argument("--lr", type=float, default=1e-2)
+parser.add_argument("--embedding-k", type=int, default=64)
+parser.add_argument("--lr", type=float, default=1e-4)
 parser.add_argument("--weight-decay", type=float, default=1e-4)
 parser.add_argument("--batch-size", type=int, default=2048)
 parser.add_argument("--num-epochs", type=int, default=1000)
@@ -187,7 +187,7 @@ imputator = imputator.to(device)
 optimizer_impute = torch.optim.Adam(imputator.parameters(), lr=lr, weight_decay=weight_decay)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
-loss_fcn = lambda x, y, z: F.binary_cross_entropy(x, y, z, reduction="sum")
+loss_fcn = lambda x, y, z: F.binary_cross_entropy(x, y, z, reduction="mean")
 
 # ips_idxs = np.arange(len(y_test))
 # np.random.shuffle(ips_idxs)
@@ -230,8 +230,8 @@ for epoch in range(1, num_epochs+1):
 
         true_impute_error = F.binary_cross_entropy(torch.nn.Sigmoid()(pred_cvr), sub_y, reduction="none")
 
-        bias_term = (((imputation - true_impute_error)**2 * tune_lambda * inv_prop) * (1 - torch.nn.Sigmoid()(pred_ctr))**2 / inv_prop**2).sum()
-        var_term = (((imputation - true_impute_error)**2 * (1 - tune_lambda) * inv_prop) * (1 - torch.nn.Sigmoid()(pred_ctr)) / inv_prop).sum()
+        bias_term = (((imputation - true_impute_error)**2 * tune_lambda * inv_prop) * (1 - torch.nn.Sigmoid()(pred_ctr))**2 / inv_prop**2).mean()
+        var_term = (((imputation - true_impute_error)**2 * (1 - tune_lambda) * inv_prop) * (1 - torch.nn.Sigmoid()(pred_ctr)) / inv_prop).mean()
 
         imputation_loss = bias_term + var_term
         epoch_imputation_loss += imputation_loss
@@ -264,7 +264,7 @@ for epoch in range(1, num_epochs+1):
         true_impute_error = F.binary_cross_entropy(torch.nn.Sigmoid()(pred_cvr), sub_y, reduction="none")
 
         ps_loss = loss_fcn(torch.nn.Sigmoid()(pred_ctr), sub_o, None)
-        dr_loss = ((true_impute_error - imputation)* sub_o * inv_prop + imputation).sum() + ps_loss
+        dr_loss = ((true_impute_error - imputation)* sub_o * inv_prop + imputation).mean() + ps_loss
         epoch_dr_loss += dr_loss
 
         optimizer.zero_grad()
