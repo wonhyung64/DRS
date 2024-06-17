@@ -104,7 +104,6 @@ if dataset_name == "yahoo_r3":
     # <user_id> <song id> <rating>
     x_test = np.array(x_test).astype(int)
 
-
 elif dataset_name == "coat":
     train_file = os.path.join(data_set_dir, "train.csv")
     test_file = os.path.join(data_set_dir, "test.csv")
