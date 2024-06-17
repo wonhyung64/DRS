@@ -108,7 +108,9 @@ elif dataset_name == "coat":
     train_file = os.path.join(data_set_dir, "train.csv")
     test_file = os.path.join(data_set_dir, "test.csv")
     x_train = pd.read_csv(train_file).to_numpy()
+    x_train = np.stack([x_train[:,0]+1, x_train[:,1]+1, x_train[:,2]], axis=-1)
     x_test = pd.read_csv(test_file).to_numpy()
+    x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
 
 
 print("===>Load from {} data set<===".format(dataset_name))
