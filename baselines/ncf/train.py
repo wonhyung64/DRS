@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime
 
 from model import NCF
-from metric import ndcg_func
+from metric import ndcg_func, recall_func, ap_func
 from utils import binarize, shuffle
 
 try:
@@ -185,4 +185,19 @@ for epoch in range(1, num_epochs+1):
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
         wandb_var.log(ndcg_dict)
 
+        recall_res = recall_func(model, x_test, y_test, device, top_k_list)
+        recall_dict: dict = {}
+        for top_k in top_k_list:
+            recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
+        wandb_var.log(recall_dict)
+
+        ap_res = ap_func(model, x_test, y_test, device, top_k_list)
+        ap_dict: dict = {}
+        for top_k in top_k_list:
+            ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
+        wandb_var.log(ap_dict)
+
 wandb.finish()
+print(f"NDCG: {ndcg_dict}")
+print(f"Recall: {recall_dict}")
+print(f"AP: {ap_dict}")
