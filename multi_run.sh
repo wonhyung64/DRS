@@ -7,11 +7,11 @@ experiments=(
 "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name coat --random-seed 2"
 "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name coat --random-seed 3"
 "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name coat --random-seed 4"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 0"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 1"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 2"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 3"
-"--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 4"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 0"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 1"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 2"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 3"
+# "--lr 1e-5 --weight-decay 1e-4 --embedding-k 64 --batch-size 64 --dataset-name yahoo_r3 --random-seed 4"
 # "--dataset-name yahoo_r3"
 )
 
