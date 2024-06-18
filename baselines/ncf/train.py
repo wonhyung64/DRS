@@ -89,14 +89,12 @@ data_set_dir = os.path.join(data_dir, dataset_name)
 if dataset_name == "yahoo_r3":
     train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
     test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
-
     x_train = []
     with open(train_file, "r") as f:
         for line in f:
             x_train.append(line.strip().split())
     # <user_id> <song id> <rating>
     x_train = np.array(x_train).astype(int)
-
     x_test = []
     with open(test_file, "r") as f:
         for line in f:
