@@ -78,6 +78,7 @@ wandb_var = wandb.init(
         "weight_decay": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
+        "dataset_name" : dataset_name,
     }
 )
 wandb.run.name = f"ncf_{expt_num}"
