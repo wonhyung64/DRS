@@ -5,12 +5,15 @@ import torch
 import argparse
 import subprocess
 import numpy as np
+import pandas as pd
 import torch.nn.functional as F
 from datetime import datetime
 
 from module.model import NCF
-from module.metric import ndcg_func
-from module.utils import binarize, shuffle
+from module.metric import ndcg_func, recall_func, ap_func
+from module.utils import binarize
+from module.loss import contrastive_loss, hard_contrastive_loss
+from module.similarity import compute_sim_matrix, seperate_pos_neg_interactions
 
 try:
     import wandb
@@ -19,70 +22,13 @@ except:
     import wandb
 
 
-def contrastive_loss(user_embed, aug_user_embed, scale=1.):
-    batch_size = user_embed.shape[0]
-    org_norm = F.normalize(user_embed, p=2, dim=1)
-    aug_norm = F.normalize(aug_user_embed, p=2, dim=1)
-    pred = F.linear(org_norm, aug_norm) / scale
-    pos_label = torch.eye(batch_size).to(user_embed.device)
-    neg_label = 1 - pos_label
-    pos_feat = (pred.exp() * pos_label).sum(dim=-1)
-    neg_feat = (pred.exp() * neg_label).sum(dim=-1)
-
-    return -torch.log(pos_feat / (pos_feat + neg_feat)).mean()
-
-
-def triplet_loss(anchor_user_embed, pos_user_embed, neg_user_embed, dist='sqeuclidean', margin='maxplus'):
-    pos_dist = torch.square(anchor_user_embed - pos_user_embed)
-    neg_dist = torch.square(anchor_user_embed - neg_user_embed)
-
-    if dist == 'euclidean':
-        pos_dist = torch.sqrt(torch.sum(pos_dist, dim=-1))
-        neg_dist = torch.sqrt(torch.sum(neg_dist, dim=-1))
-    elif dist == 'sqeuclidean':
-        pos_dist = torch.sum(pos_dist, axis=-1)
-        neg_dist = torch.sum(neg_dist, axis=-1)
-
-    loss = pos_dist - neg_dist
-
-    if margin == 'maxplus':
-        loss = torch.maximum(torch.tensor(0.0), 1 + loss)
-    elif margin == 'softplus':
-        loss = torch.log(1 + torch.exp(loss))
-
-    return torch.mean(loss)
-
-
-def compute_sim_matrix(pos_interactions, k=5):
-    pref_user_sim_ = torch.matmul(pos_interactions, pos_interactions.T).cpu().numpy()
-    pref_user_sim = pref_user_sim_ * (np.ones_like(pref_user_sim_) - np.identity(num_users)*2)
-    pref_user_topk = torch.topk(torch.tensor(pref_user_sim), k).indices + 1
-
-    pref_item_sim_ = torch.matmul(pos_interactions.T, pos_interactions).cpu().numpy()
-    pref_item_sim = pref_item_sim_ * (np.ones_like(pref_item_sim_) - np.identity(num_items)*2)
-    pref_item_topk = torch.topk(torch.tensor(pref_item_sim), k).indices + 1
-
-    return pref_user_topk, pref_item_topk
-
-
-def hard_contrastive_loss(anchor_embed, aug_embed, scale=1.):
-    batch_size = anchor_embed.shape[0]
-    device = anchor_embed.device
-    anchor_embed = F.normalize(anchor_embed, p=2, dim=1)
-    aug_embed = F.normalize(aug_embed, p=2, dim=1)
-    simlarity = (anchor_embed.unsqueeze(1) * aug_embed).sum(-1) / scale
-    target = torch.LongTensor(np.zeros(batch_size)).to(device)
-
-    return torch.nn.functional.cross_entropy(simlarity, target)
-
-
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--embedding-k", type=int, default=64)
 parser.add_argument("--lr", type=float, default=1e-5)
-parser.add_argument("--weight-decay", type=float, default=0.)
-parser.add_argument("--batch-size", type=int, default=256)
+parser.add_argument("--weight-decay", type=float, default=1e-4)
+parser.add_argument("--batch-size", type=int, default=64)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
@@ -90,13 +36,13 @@ parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--balance-param", type=float, default=1.5)
 parser.add_argument("--temperature", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
-parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
+parser.add_argument("--dataset-name", type=str, default="coat")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--pos-topk", type=int, default=1)
-parser.add_argument("--neg-topk", type=int, default=5)
-parser.add_argument("--ipw-sampling", type=bool, default=True)
+parser.add_argument("--neg-topk", type=int, default=0)
+parser.add_argument("--ipw-sampling", type=bool, default=False)
 parser.add_argument("--ipw-erm", type=bool, default=False)
-parser.add_argument("--pref-update-interval", type=int, default=25)
+parser.add_argument("--pref-update-interval", type=int, default=9999)
 
 
 try:
@@ -161,6 +107,7 @@ wandb_var = wandb.init(
         "ipw_erm": ipw_erm,
         "pref_update_interval": pref_update_interval,
         "neg_topk": neg_topk,
+        "dataset_name": dataset_name,
     }
 )
 wandb.run.name = f"ours_{expt_num}"
@@ -168,26 +115,41 @@ wandb.run.name = f"ours_{expt_num}"
 
 #%% DATA LOADER
 data_set_dir = os.path.join(data_dir, dataset_name)
-train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
-test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
 
-x_train = []
-with open(train_file, "r") as f:
-    for line in f:
-        x_train.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_train = np.array(x_train).astype(int)
+if dataset_name == "yahoo_r3":
+    train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
+    test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
+    x_train = []
+    with open(train_file, "r") as f:
+        for line in f:
+            x_train.append(line.strip().split())
+    # <user_id> <song id> <rating>
+    x_train = np.array(x_train).astype(int)
+    x_test = []
+    with open(test_file, "r") as f:
+        for line in f:
+            x_test.append(line.strip().split())
+    # <user_id> <song id> <rating>
+    x_test = np.array(x_test).astype(int)
 
-x_test = []
-with open(test_file, "r") as f:
-    for line in f:
-        x_test.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_test = np.array(x_test).astype(int)
+elif dataset_name == "coat":
+    train_file = os.path.join(data_set_dir, "train.csv")
+    test_file = os.path.join(data_set_dir, "test.csv")
+    x_train = pd.read_csv(train_file).to_numpy()
+    x_train = np.stack([x_train[:,0]+1, x_train[:,1]+1, x_train[:,2]], axis=-1)
+    x_test = pd.read_csv(test_file).to_numpy()
+    x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
 
 print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
 print("[test]  num data:", x_test.shape[0])
+
+"""INTERACTION MATRIX"""
+if not (
+    os.path.exists(f"./assets/{dataset_name}/pos_interactions.npy") and
+    os.path.exists(f"./assets/{dataset_name}/neg_interactions.npy")
+    ): 
+    seperate_pos_neg_interactions(x_train, dataset_name)
 
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
@@ -203,8 +165,7 @@ num_items = x_train[:,1].max()
 print("# user: {}, # item: {}".format(num_users, num_items))
 
 
-"""INTERACTION MATRIX"""
-pos_interactions = torch.tensor(np.load("./assets/pos_interactions.npy")).to(device)
+pos_interactions = torch.tensor(np.load(f"./assets/{dataset_name}/pos_interactions.npy")).to(device)
 
 if ipw_sampling:
     popularity = pos_interactions.sum(dim=0) / num_users
@@ -212,7 +173,7 @@ if ipw_sampling:
 else:
     init_pos_interactions = pos_interactions
 
-pos_user_topk_, pos_item_topk_ = compute_sim_matrix(init_pos_interactions)
+pos_user_topk_, pos_item_topk_ = compute_sim_matrix(init_pos_interactions, num_users, num_items)
 
 
 """USER PAIRS"""
@@ -231,7 +192,7 @@ pos_item_top1 = pos_item_top1_[train_item_indices]
 
 """HARD NEGATIVES"""
 if neg_topk:
-    neg_interactions = torch.tensor(np.load("./assets/neg_interactions.npy")).to(device)
+    neg_interactions = torch.tensor(np.load(f"./assets/{dataset_name}/neg_interactions.npy")).to(device)
     neg_user_topk_, neg_item_topk_ = compute_sim_matrix(neg_interactions, k=neg_topk)
     neg_user_topk = neg_user_topk_[train_user_indices]
     neg_item_topk = neg_item_topk_[train_item_indices]
@@ -371,8 +332,20 @@ for epoch in range(1, num_epochs+1):
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
         wandb_var.log(ndcg_dict)
 
-    if epoch % pref_update_interval == 0:
+        recall_res = recall_func(model, x_test, y_test, device, top_k_list)
+        recall_dict: dict = {}
+        for top_k in top_k_list:
+            recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
+        wandb_var.log(recall_dict)
 
+        ap_res = ap_func(model, x_test, y_test, device, top_k_list)
+        ap_dict: dict = {}
+        for top_k in top_k_list:
+            ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
+        wandb_var.log(ap_dict)
+
+
+    if epoch % pref_update_interval == 0:
         propensity_score = []
         for u in range(num_users):
             with torch.no_grad():
@@ -383,7 +356,7 @@ for epoch in range(1, num_epochs+1):
         propensity_score = torch.concat(propensity_score, dim=-1).T
 
         weighted_pos_interactions = pos_interactions / propensity_score
-        pos_user_topk_, pos_item_topk_ = compute_sim_matrix(weighted_pos_interactions)
+        pos_user_topk_, pos_item_topk_ = compute_sim_matrix(weighted_pos_interactions, num_users, num_items)
 
         """USER PAIRS"""
         pos_user_indices = np.random.randint(low=0, high=pos_topk, size=len(pos_user_topk_))
@@ -398,5 +371,8 @@ for epoch in range(1, num_epochs+1):
         pos_item_top1 = pos_item_top1_[train_item_indices]
 
 wandb.finish()
+print(f"NDCG: {ndcg_dict}")
+print(f"Recall: {recall_dict}")
+print(f"AP: {ap_dict}")
 
 # %%
