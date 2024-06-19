@@ -47,9 +47,9 @@ RUN_SRC=./run_src.sh
 ENV=/home1/wonhyung64/anaconda3/envs/openmmlab/bin/python3
 
 # file directory of experiment ".py"
-EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/mf/train.py   #MF
+# EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/mf/train.py   #MF
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/mf_ips/train.py   #MF-IPS
-# EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/mf_snips/train.py   #MF-SNIPS
+EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/mf_snips/train.py   #MF-SNIPS
 
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf/train.py   #NCF
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf_ips/train.py   #NCF-IPS
