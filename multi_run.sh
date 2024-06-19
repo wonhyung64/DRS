@@ -35,7 +35,8 @@ ENV=/home1/wonhyung64/anaconda3/envs/openmmlab/bin/python3
 # file directory of experiment ".py"
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/yahoo_implicit.py                   #OURS
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf/train.py   #NCF
-EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf_ips/train.py   #NCF-IPS
+# EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf_ips/train.py   #NCF-IPS
+EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/ncf_snips/train.py   #NCF-SNIPS
 # EXECUTION_FILE=/home1/wonhyung64/Github/DRS/baselines/biser/yahoo_implicit.py   #biser
 
 # data directory for experiments
