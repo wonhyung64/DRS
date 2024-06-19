@@ -4,11 +4,12 @@ import torch
 import argparse
 import subprocess
 import numpy as np
+import pandas as pd
 import torch.nn.functional as F
 from datetime import datetime
 
 from model import NCF
-from metric import ndcg_func
+from metric import ndcg_func, recall_func, ap_func
 from utils import binarize
 
 try:
@@ -106,22 +107,31 @@ wandb.run.name = f"ncf_snips_{expt_num}"
 
 #%% DATA LOADER
 data_set_dir = os.path.join(data_dir, dataset_name)
-train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
-test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
 
-x_train = []
-with open(train_file, "r") as f:
-    for line in f:
-        x_train.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_train = np.array(x_train).astype(int)
+if dataset_name == "yahoo_r3":
+    train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
+    test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
+    x_train = []
+    with open(train_file, "r") as f:
+        for line in f:
+            x_train.append(line.strip().split())
+    # <user_id> <song id> <rating>
+    x_train = np.array(x_train).astype(int)
+    x_test = []
+    with open(test_file, "r") as f:
+        for line in f:
+            x_test.append(line.strip().split())
+    # <user_id> <song id> <rating>
+    x_test = np.array(x_test).astype(int)
 
-x_test = []
-with open(test_file, "r") as f:
-    for line in f:
-        x_test.append(line.strip().split())
-# <user_id> <song id> <rating>
-x_test = np.array(x_test).astype(int)
+elif dataset_name == "coat":
+    train_file = os.path.join(data_set_dir, "train.csv")
+    test_file = os.path.join(data_set_dir, "test.csv")
+    x_train = pd.read_csv(train_file).to_numpy()
+    x_train = np.stack([x_train[:,0]+1, x_train[:,1]+1, x_train[:,2]], axis=-1)
+    x_test = pd.read_csv(test_file).to_numpy()
+    x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
+
 
 print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
@@ -203,4 +213,19 @@ for epoch in range(1, num_epochs+1):
             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
         wandb_var.log(ndcg_dict)
 
+        recall_res = recall_func(model, x_test, y_test, device, top_k_list)
+        recall_dict: dict = {}
+        for top_k in top_k_list:
+            recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
+        wandb_var.log(recall_dict)
+
+        ap_res = ap_func(model, x_test, y_test, device, top_k_list)
+        ap_dict: dict = {}
+        for top_k in top_k_list:
+            ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
+        wandb_var.log(ap_dict)
+
 wandb.finish()
+print(f"NDCG: {ndcg_dict}")
+print(f"Recall: {recall_dict}")
+print(f"AP: {ap_dict}")
