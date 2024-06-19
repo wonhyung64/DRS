@@ -18,6 +18,6 @@ class MF(nn.Module):
         item_idx = x[:,1]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        out = torch.sum(user_embed.mul(item_embed), 1)
+        out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1)
 
         return out, user_embed, item_embed
