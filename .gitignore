@@ -24,3 +24,4 @@ weights/
 .DS_Store
 assets/
 logs/
+multi_run.sh
