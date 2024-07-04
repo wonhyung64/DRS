@@ -56,3 +56,25 @@ def compute_sim_matrix(pos_interactions, num_users, num_items, k=5):
     pref_item_topk = torch.topk(torch.tensor(pref_item_sim), k).indices + 1
 
     return pref_user_topk, pref_item_topk
+
+
+def corr_sim(x_train, y_train, num_users: int, num_items: int):
+    total_feedback_list = []
+    for u in tqdm(range(1, num_users+1)):
+        u_idxs = x_train[:,0] == u
+        obs_items = x_train[u_idxs, 1]
+        obs_feedbacks = y_train[u_idxs]
+
+        user_feedback_list = []
+        for i in range(1, num_items+1):
+            if i in obs_items:
+                user_feedback_list.append(obs_feedbacks[obs_items==i][0])
+            else:
+                user_feedback_list.append(0)
+        total_feedback_list.append(user_feedback_list)
+    total_pos_feedback = np.array(total_feedback_list).astype(np.float32)
+
+    user_user_sim = torch.tensor(total_pos_feedback).corrcoef()
+    item_item_sim = torch.tensor(total_pos_feedback).T.corrcoef()
+
+    return user_user_sim, item_item_sim
