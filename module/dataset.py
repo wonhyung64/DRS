@@ -33,6 +33,7 @@ def load_dataset(dataset_name: str, dataset_dir: str):
         x_train["interaction"] = x_train["watch_ratio"].map(lambda x: 1 if x >= 2. else 0)
         x_train = x_train[["user_id", "video_id", "interaction"]].to_numpy()
         x_train = np.stack([x_train[:,0]+1, x_train[:,1]+1, x_train[:,2]], axis=-1)
+
         x_test = pd.read_csv(test_file)
         x_test["interaction"] = x_test["watch_ratio"].map(lambda x: 1 if x >= 2. else 0)
         x_test = x_test[["user_id", "video_id", "interaction"]].to_numpy()

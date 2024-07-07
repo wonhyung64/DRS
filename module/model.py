@@ -14,6 +14,7 @@ class NCF(nn.Module):
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
         self.linear_1 = nn.Linear(self.embedding_k*2, self.embedding_k)
         self.linear_2 = nn.Linear(self.embedding_k, 1, bias=False)
+        self.scale_param = torch.nn.parameter.Parameter(torch.ones(1))
 
     def forward(self, x):
         user_idx = x[:,0]
@@ -39,6 +40,7 @@ class MF(nn.Module):
         self.embedding_k = embedding_k
         self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
+        self.scale_param = torch.nn.parameter.Parameter(torch.ones(1))
 
     def forward(self, x):
         user_idx = x[:,0]
