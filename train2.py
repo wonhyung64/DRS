@@ -99,7 +99,7 @@ wandb_var = wandb.init(
         "base_model": base_model,
     }
 )
-wandb.run.name = f"ours_{expt_num}"
+wandb.run.name = f"ours2_{expt_num}"
 
 
 #%% DATA LOADER
