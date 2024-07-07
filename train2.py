@@ -30,20 +30,19 @@ def weight_fcn(similarity, scale_param):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--embedding-k", type=int, default=64)
-parser.add_argument("--lr", type=float, default=1e-3)
-parser.add_argument("--weight-decay", type=float, default=1e-4)
+parser.add_argument("--embedding-k", type=int, default=4)
+parser.add_argument("--lr", type=float, default=1e-2)
+parser.add_argument("--weight-decay", type=float, default=0.)
 parser.add_argument("--batch-size", type=int, default=2048)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
-parser.add_argument("--balance-param", type=float, default=1.5)
-parser.add_argument("--temperature", type=float, default=1.)
+parser.add_argument("--balance-param", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
-parser.add_argument("--dataset-name", type=str, default="yahoo")
+parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
-parser.add_argument("--base-model", type=str, default="ncf")
+parser.add_argument("--base-model", type=str, default="mf")
 
 try:
     args = parser.parse_args()
@@ -60,7 +59,6 @@ random_seed = args.random_seed
 evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
 balance_param = args.balance_param
-temperature = args.temperature
 data_dir = args.data_dir
 dataset_name = args.dataset_name
 contrast_pair = args.contrast_pair
@@ -95,7 +93,6 @@ wandb_var = wandb.init(
         "weight_decay": weight_decay,
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
-        "temperature": temperature,
         "balance_param": balance_param,
         "contrast_pair": contrast_pair,
         "dataset_name": dataset_name,
@@ -154,6 +151,7 @@ for epoch in range(1, num_epochs+1):
     epoch_total_loss = 0.
     epoch_rec_loss = 0.
     epoch_cl_loss = 0.
+    epoch_scale_param = 0.
 
     epoch_user_sim_loss = None
     epoch_item_sim_loss = None
@@ -237,12 +235,14 @@ for epoch in range(1, num_epochs+1):
             epoch_user_sim_loss += user_sim_loss
             epoch_item_sim_loss += item_sim_loss
             epoch_cl_loss += cl_loss
+            epoch_scale_param += model.scale_param
 
         else: 
             raise ValueError("Unknown contrastive learning pair!")
 
         total_loss = rec_loss + cl_loss
         epoch_total_loss += total_loss
+
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -255,6 +255,7 @@ for epoch in range(1, num_epochs+1):
         'epoch_rec_loss': float(epoch_rec_loss.item()),
         'epoch_cl_loss': float(epoch_cl_loss.item()),
         'epoch_total_loss': float(epoch_total_loss.item()),
+        'epoch_scale_param': float(epoch_scale_param.item()) / total_batch,
     }
 
     if epoch_user_sim_loss != None:
@@ -292,4 +293,3 @@ print(f"Recall: {recall_dict}")
 print(f"AP: {ap_dict}")
 
 # %%
-model.scale_param
