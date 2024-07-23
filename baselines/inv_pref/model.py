@@ -189,7 +189,7 @@ def _init_eps(envs_num):
 
 class InvPrefImplicit(nn.Module):
     def __init__(
-            self, user_num: int, item_num: int, env_num: int, factor_num: int, reg_only_embed: bool = False,
+            self, user_num: int, item_num: int, env_num: int, embedding_k: int, reg_only_embed: bool = False,
             reg_env_embed: bool = True
     ):
         super(InvPrefImplicit, self).__init__()
@@ -197,17 +197,17 @@ class InvPrefImplicit(nn.Module):
         self.item_num: int = item_num
         self.env_num: int = env_num
 
-        self.factor_num: int = factor_num
+        self.factor_num: int = embedding_k
 
-        self.embed_user_invariant = nn.Embedding(user_num, factor_num)
-        self.embed_item_invariant = nn.Embedding(item_num, factor_num)
+        self.embed_user_invariant = nn.Embedding(user_num, embedding_k)
+        self.embed_item_invariant = nn.Embedding(item_num, embedding_k)
 
-        self.embed_user_env_aware = nn.Embedding(user_num, factor_num)
-        self.embed_item_env_aware = nn.Embedding(item_num, factor_num)
+        self.embed_user_env_aware = nn.Embedding(user_num, embedding_k)
+        self.embed_item_env_aware = nn.Embedding(item_num, embedding_k)
 
-        self.embed_env = nn.Embedding(env_num, factor_num)
+        self.embed_env = nn.Embedding(env_num, embedding_k)
 
-        self.env_classifier = LinearLogSoftMaxEnvClassifier(factor_num, env_num)
+        self.env_classifier = LinearLogSoftMaxEnvClassifier(embedding_k, env_num)
         self.output_func = nn.Sigmoid()
 
         self.reg_only_embed: bool = reg_only_embed
@@ -309,21 +309,13 @@ class InvPrefImplicit(nn.Module):
         # print('L2', result)
         return result
 
-    def predict(self, users_id):
-        users_embed_gmf: torch.Tensor = self.embed_user_invariant(users_id)
-        items_embed_gmf: torch.Tensor = self.embed_item_invariant.weight
-
-        user_to_cat = []
-        for i in range(users_embed_gmf.shape[0]):
-            tmp: torch.Tensor = users_embed_gmf[i:i + 1, :]
-            tmp = tmp.repeat(items_embed_gmf.shape[0], 1)
-            user_to_cat.append(tmp)
-        users_emb_cat: torch.Tensor = torch.cat(user_to_cat, dim=0)
-        items_emb_cat: torch.Tensor = items_embed_gmf.repeat(users_embed_gmf.shape[0], 1)
-
-        invariant_preferences: torch.Tensor = users_emb_cat * items_emb_cat
-        invariant_score: torch.Tensor = self.output_func(torch.sum(invariant_preferences, dim=1))
-        return invariant_score.reshape(users_id.shape[0], items_embed_gmf.shape[0])
+    def predict(self, x_u):
+        user_id = x_u[0,0]
+        items_id = x_u[:,1]
+        users_embed_gmf = self.embed_user_invariant(user_id)
+        items_embed_gmf = self.embed_item_invariant(items_id)
+        logit = (users_embed_gmf * items_embed_gmf).sum(-1)
+        return nn.Sigmoid()(logit)
 
     def cluster_predict(self, users_id, items_id, envs_id) -> torch.Tensor:
         _, env_aware_score, _ = self.forward(users_id, items_id, envs_id, 0.)
