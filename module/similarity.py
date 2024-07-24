@@ -78,3 +78,28 @@ def corr_sim(x_train, y_train, num_users: int, num_items: int):
     item_item_sim = torch.tensor(total_pos_feedback).T.corrcoef()
 
     return user_user_sim, item_item_sim
+
+
+def cosine_sim(x_train, y_train, num_users: int, num_items: int):
+    total_feedback_list = []
+    for u in tqdm(range(1, num_users+1)):
+        u_idxs = x_train[:,0] == u
+        obs_items = x_train[u_idxs, 1]
+        obs_feedbacks = y_train[u_idxs]
+
+        user_feedback_list = []
+        for i in range(1, num_items+1):
+            if i in obs_items:
+                user_feedback_list.append(obs_feedbacks[obs_items==i][0])
+            else:
+                user_feedback_list.append(0)
+        total_feedback_list.append(user_feedback_list)
+    total_pos_feedback = torch.tensor(np.array(total_feedback_list).astype(np.float32))
+    
+    user_norm = total_pos_feedback.T.norm(dim=0, p=2).maximum(torch.tensor(1e-8))
+    item_norm = total_pos_feedback.norm(dim=0, p=2).maximum(torch.tensor(1e-8))
+
+    user_user_sim = torch.matmul(total_pos_feedback, total_pos_feedback.T) / user_norm.outer(user_norm) * (1 - torch.eye(num_users))
+    item_item_sim = torch.matmul(total_pos_feedback.T, total_pos_feedback) / item_norm.outer(item_norm) * (1 - torch.eye(num_items))
+
+    return user_user_sim, item_item_sim

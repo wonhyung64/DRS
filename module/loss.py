@@ -7,7 +7,7 @@ def contrastive_loss(user_embed, aug_user_embed, scale=1.):
     batch_size = user_embed.shape[0]
     org_norm = F.normalize(user_embed, p=2, dim=1)
     aug_norm = F.normalize(aug_user_embed, p=2, dim=1)
-    pred = F.linear(org_norm, aug_norm) / scale
+    pred = F.linear(aug_norm, org_norm) / scale
     pos_label = torch.eye(batch_size).to(user_embed.device)
     neg_label = 1 - pos_label
     pos_feat = (pred.exp() * pos_label).sum(dim=-1)

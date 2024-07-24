@@ -13,7 +13,7 @@ from module.model import NCF, MF
 from module.metric import ndcg_func, recall_func, ap_func
 from module.utils import binarize
 from module.loss import contrastive_loss, hard_contrastive_loss
-from module.similarity import compute_sim_matrix, seperate_pos_neg_interactions, corr_sim
+from module.similarity import compute_sim_matrix, seperate_pos_neg_interactions, corr_sim, cosine_sim
 from module.dataset import load_dataset
 
 try:
@@ -30,10 +30,10 @@ def weight_fcn(similarity, scale_param):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--embedding-k", type=int, default=4)
-parser.add_argument("--lr", type=float, default=1e-2)
-parser.add_argument("--weight-decay", type=float, default=0.)
-parser.add_argument("--batch-size", type=int, default=2048)
+parser.add_argument("--embedding-k", type=int, default=64)
+parser.add_argument("--lr", type=float, default=1e-5)
+parser.add_argument("--weight-decay", type=float, default=1e-4)
+parser.add_argument("--batch-size", type=int, default=64)
 parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
@@ -42,7 +42,9 @@ parser.add_argument("--balance-param", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
 parser.add_argument("--contrast-pair", type=str, default="both")
-parser.add_argument("--base-model", type=str, default="mf")
+parser.add_argument("--base-model", type=str, default="ncf")
+parser.add_argument("--sim-measure", type=str, default="cosine")
+parser.add_argument("--temperature", type=float, default=1.)
 
 try:
     args = parser.parse_args()
@@ -63,6 +65,8 @@ data_dir = args.data_dir
 dataset_name = args.dataset_name
 contrast_pair = args.contrast_pair
 base_model = args.base_model
+sim_measure = args.sim_measure
+temperature = args.temperature
 
 
 if torch.cuda.is_available():
@@ -97,9 +101,11 @@ wandb_var = wandb.init(
         "contrast_pair": contrast_pair,
         "dataset_name": dataset_name,
         "base_model": base_model,
+        "sim_measure": sim_measure,
+        "temperatrue": temperature,
     }
 )
-wandb.run.name = f"ours2_{expt_num}"
+wandb.run.name = f"ours3_{expt_num}"
 
 
 #%% DATA LOADER
@@ -126,7 +132,21 @@ print("# user: {}, # item: {}".format(num_users, num_items))
 
 
 #%% User/Item similarity
-user_user_sim, item_item_sim = corr_sim(x_train, y_train, num_users, num_items)
+if sim_measure == "corr":
+    user_user_sim, item_item_sim = corr_sim(x_train, y_train, num_users, num_items)
+elif sim_measure == "cosine":
+    user_user_sim, item_item_sim = cosine_sim(x_train, y_train, num_users, num_items)
+
+
+"""USER PAIRS"""
+train_user_indices = x_train.copy()[:, 0] - 1
+top1_sim_user = user_user_sim.argmax(-1)+1
+train_pos_user = top1_sim_user[train_user_indices]
+
+"""ITEM PAIRS"""
+train_item_indices = x_train.copy()[:, 1] - 1
+top1_sim_item = item_item_sim.argmax(-1)+1
+train_pos_item = top1_sim_item[train_item_indices]
 
 
 #%% TRAIN INITIAILIZE
@@ -148,7 +168,6 @@ for epoch in range(1, num_epochs+1):
     epoch_total_loss = 0.
     epoch_rec_loss = 0.
     epoch_cl_loss = 0.
-    epoch_scale_param = 0.
 
     epoch_user_sim_loss = None
     epoch_item_sim_loss = None
@@ -173,66 +192,32 @@ for epoch in range(1, num_epochs+1):
         rec_loss = loss_fcn(pred, sub_y)
         epoch_rec_loss += rec_loss
 
-        batch_users = org_x[:, 0].cpu()
-        user_x, user_y = torch.meshgrid(batch_users, batch_users)
-        user_sim = user_user_sim[user_x.flatten(), user_y.flatten()].reshape([batch_size, batch_size]).to(device)
-        # user_sim = user_user_sim[user_x.flatten(), user_y.flatten()]
-        # user_weights = weight_fcn(user_sim, scale_param).to(device).reshape([batch_size, batch_size])
+        sub_pos_user = train_pos_user[selected_idx]
+        sub_pos_item = train_pos_item[selected_idx]
+        pos_x = torch.stack([sub_pos_user, sub_pos_item], -1).to(device)
 
-        batch_items = org_x[:, 1].cpu()
-        item_x, item_y = torch.meshgrid(batch_items, batch_items)
-        item_sim = item_item_sim[item_x.flatten(), item_y.flatten()].reshape([batch_size, batch_size]).to(device)
-        # item_sim = item_item_sim[item_x.flatten(), item_y.flatten()]
-        # item_weights = weight_fcn(item_sim, scale_param).to(device).reshape([batch_size, batch_size])
+        _, pos_user_embed, pos_item_embed = model(pos_x)
+
 
         if contrast_pair == "user":
-            batch_size = anchor_user_embed.shape[0]
-            org_norm = F.normalize(anchor_user_embed, p=2, dim=1)
-            inbatch_norm = org_norm.clone().detach()
-            # weighted_sim = -F.linear(org_norm, inbatch_norm) * user_weights
-            weighted_sim = -torch.relu(model.scale_param) * (F.linear(org_norm, inbatch_norm) - user_sim)
-            user_sim_loss = torch.log(1 + torch.sum(weighted_sim.exp() * (1 - torch.eye(batch_size)).to(device), dim=-1)).mean()
-            user_sim_loss = user_sim_loss * balance_param
-
+            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
             cl_loss = user_sim_loss 
             epoch_user_sim_loss += user_sim_loss
             epoch_cl_loss += cl_loss
             
         elif contrast_pair == "item":
-            batch_size = anchor_item_embed.shape[0]
-            org_norm = F.normalize(anchor_item_embed, p=2, dim=1)
-            inbatch_norm = org_norm.clone().detach()
-            # weighted_sim = -F.linear(org_norm, inbatch_norm) * item_weights
-            weighted_sim = -torch.relu(model.scale_param) * (F.linear(org_norm, inbatch_norm) - item_sim)
-            item_sim_loss = torch.log(1 + torch.sum(weighted_sim.exp() * (1 - torch.eye(batch_size)).to(device), dim=-1)).mean()
-            item_sim_loss = item_sim_loss * balance_param
-
+            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = item_sim_loss
             epoch_item_sim_loss += item_sim_loss
             epoch_cl_loss += cl_loss
 
         elif contrast_pair == "both":
-            batch_size = anchor_user_embed.shape[0]
-            org_norm = F.normalize(anchor_user_embed, p=2, dim=1)
-            inbatch_norm = org_norm.clone().detach()
-            # weighted_sim = -F.linear(org_norm, inbatch_norm) * user_weights
-            weighted_sim = -torch.relu(model.scale_param) * (F.linear(org_norm, inbatch_norm) - user_sim)
-            user_sim_loss = torch.log(1 + torch.sum(weighted_sim.exp() * (1 - torch.eye(batch_size)).to(device), dim=-1)).mean()
-            user_sim_loss = user_sim_loss * balance_param
-
-            batch_size = anchor_item_embed.shape[0]
-            org_norm = F.normalize(anchor_item_embed, p=2, dim=1)
-            inbatch_norm = org_norm.clone().detach().requires_grad_(True)
-            # weighted_sim = -F.linear(org_norm, inbatch_norm) * item_weights
-            weighted_sim = -torch.relu(model.scale_param) * (F.linear(org_norm, inbatch_norm) - item_sim)
-            item_sim_loss = torch.log(1 + torch.sum(weighted_sim.exp() * (1 - torch.eye(batch_size)).to(device), dim=-1)).mean()
-            item_sim_loss = item_sim_loss * balance_param
-
+            user_sim_loss = contrastive_loss(anchor_user_embed, pos_user_embed, temperature) * balance_param
+            item_sim_loss = contrastive_loss(anchor_item_embed, pos_item_embed, temperature) * balance_param
             cl_loss = (user_sim_loss + item_sim_loss)
             epoch_user_sim_loss += user_sim_loss
             epoch_item_sim_loss += item_sim_loss
             epoch_cl_loss += cl_loss
-            epoch_scale_param += model.scale_param
 
         else: 
             raise ValueError("Unknown contrastive learning pair!")
@@ -252,7 +237,6 @@ for epoch in range(1, num_epochs+1):
         'epoch_rec_loss': float(epoch_rec_loss.item()),
         'epoch_cl_loss': float(epoch_cl_loss.item()),
         'epoch_total_loss': float(epoch_total_loss.item()),
-        'epoch_scale_param': float(epoch_scale_param.item()) / total_batch,
     }
 
     if epoch_user_sim_loss != None:
