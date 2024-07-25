@@ -31,7 +31,7 @@ def weight_fcn(similarity, scale_param):
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--embedding-k", type=int, default=64)
-parser.add_argument("--lr", type=float, default=1e-5)
+parser.add_argument("--lr", type=float, default=3e-4)
 parser.add_argument("--weight-decay", type=float, default=1e-4)
 parser.add_argument("--batch-size", type=int, default=64)
 parser.add_argument("--num-epochs", type=int, default=1000)
@@ -40,11 +40,11 @@ parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--balance-param", type=float, default=1.)
 parser.add_argument("--data-dir", type=str, default="./data")
-parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
+parser.add_argument("--dataset-name", type=str, default="coat")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--base-model", type=str, default="ncf")
-parser.add_argument("--sim-measure", type=str, default="cosine")
-parser.add_argument("--temperature", type=float, default=1.)
+parser.add_argument("--sim-measure", type=str, default="corr")
+parser.add_argument("--temperature", type=float, default=2.)
 
 try:
     args = parser.parse_args()
@@ -137,7 +137,6 @@ if sim_measure == "corr":
 elif sim_measure == "cosine":
     user_user_sim, item_item_sim = cosine_sim(x_train, y_train, num_users, num_items)
 
-
 """USER PAIRS"""
 train_user_indices = x_train.copy()[:, 0] - 1
 top1_sim_user = user_user_sim.argmax(-1)+1
@@ -194,7 +193,7 @@ for epoch in range(1, num_epochs+1):
 
         sub_pos_user = train_pos_user[selected_idx]
         sub_pos_item = train_pos_item[selected_idx]
-        pos_x = torch.stack([sub_pos_user, sub_pos_item], -1).to(device)
+        pos_x = torch.stack([sub_pos_user-1, sub_pos_item-1], -1).to(device)
 
         _, pos_user_embed, pos_item_embed = model(pos_x)
 
