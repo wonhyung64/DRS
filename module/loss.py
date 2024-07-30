@@ -16,6 +16,20 @@ def contrastive_loss(user_embed, aug_user_embed, scale=1.):
     return -torch.log(pos_feat / (pos_feat + neg_feat)).mean()
 
 
+def angle_contrastive_loss(user_embed, aug_user_embed, sim, scale=1.):
+    batch_size = user_embed.shape[0]
+    org_norm = F.normalize(user_embed, p=2, dim=1)
+    aug_norm = F.normalize(aug_user_embed, p=2, dim=1)
+    angle = torch.arccos(F.linear(aug_norm, org_norm))
+    pred = (angle - torch.min(sim.arccos(), angle)).cos() / scale
+    pos_label = torch.eye(batch_size).to(aug_user_embed.device)
+    neg_label = 1 - pos_label
+    pos_feat = (pred.exp() * pos_label).sum(dim=-1)
+    neg_feat = (pred.exp() * neg_label).sum(dim=-1)
+
+    return -torch.log(pos_feat / (pos_feat + neg_feat)).mean()
+
+
 def triplet_loss(anchor_user_embed, pos_user_embed, neg_user_embed, dist='sqeuclidean', margin='maxplus'):
     pos_dist = torch.square(anchor_user_embed - pos_user_embed)
     neg_dist = torch.square(anchor_user_embed - neg_user_embed)
