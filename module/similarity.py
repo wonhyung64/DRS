@@ -74,8 +74,8 @@ def corr_sim(x_train, y_train, num_users: int, num_items: int):
         total_feedback_list.append(user_feedback_list)
     total_pos_feedback = np.array(total_feedback_list).astype(np.float32) + 0.1
 
-    user_user_sim = torch.tensor(total_pos_feedback).corrcoef()
-    item_item_sim = torch.tensor(total_pos_feedback).T.corrcoef()
+    user_user_sim = torch.tensor(total_pos_feedback).corrcoef() * (1 - torch.eye(num_users))
+    item_item_sim = torch.tensor(total_pos_feedback).T.corrcoef() * (1 - torch.eye(num_items))
 
     return user_user_sim, item_item_sim
 
