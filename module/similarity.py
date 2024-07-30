@@ -90,7 +90,11 @@ def cosine_sim(x_train, y_train, num_users: int, num_items: int):
         user_feedback_list = []
         for i in range(1, num_items+1):
             if i in obs_items:
-                user_feedback_list.append(obs_feedbacks[obs_items==i][0])
+                feed_back = obs_feedbacks[obs_items==i][0]
+                if feed_back == 0:
+                    feed_back = -1
+                user_feedback_list.append(feed_back)
+                # user_feedback_list.append(obs_feedbacks[obs_items==i][0])
             else:
                 user_feedback_list.append(0)
         total_feedback_list.append(user_feedback_list)
