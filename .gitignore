@@ -25,3 +25,7 @@ weights/
 assets/
 logs/
 multi_run.sh
+DOSNES*
+dosnes
+*.pth
+*.gif
