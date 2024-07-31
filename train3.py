@@ -43,7 +43,7 @@ parser.add_argument("--data-dir", type=str, default="./data")
 parser.add_argument("--dataset-name", type=str, default="coat")
 parser.add_argument("--contrast-pair", type=str, default="both")
 parser.add_argument("--base-model", type=str, default="ncf")
-parser.add_argument("--sim-measure", type=str, default="corr")
+parser.add_argument("--sim-measure", type=str, default="cosine")
 parser.add_argument("--temperature", type=float, default=2.)
 
 try:
@@ -221,7 +221,7 @@ for epoch in range(1, num_epochs+1):
         else: 
             raise ValueError("Unknown contrastive learning pair!")
 
-        total_loss = rec_loss + cl_loss
+        total_loss = cl_loss
         epoch_total_loss += total_loss
 
 
@@ -271,5 +271,3 @@ wandb.finish()
 print(f"NDCG: {ndcg_dict}")
 print(f"Recall: {recall_dict}")
 print(f"AP: {ap_dict}")
-
-# %%
