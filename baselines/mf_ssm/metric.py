@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import torch.nn.functional as F
 from collections import defaultdict
 
 
@@ -15,7 +16,10 @@ def ndcg_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        _, user_embed, item_embed = model(x_u)
+        user_norm = F.normalize(user_embed, p=2, dim=1)
+        item_norm = F.normalize(item_embed, p=2, dim=1)
+        pred_ = (user_norm * item_norm).sum(-1)
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:
@@ -47,7 +51,10 @@ def recall_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        _, user_embed, item_embed = model(x_u)
+        user_norm = F.normalize(user_embed, p=2, dim=1)
+        item_norm = F.normalize(item_embed, p=2, dim=1)
+        pred_ = (user_norm * item_norm).sum(-1)
         pred = pred_.flatten().cpu().detach()
         total_rel = sum(y_u == 1)
 
@@ -75,7 +82,10 @@ def ap_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        _, user_embed, item_embed = model(x_u)
+        user_norm = F.normalize(user_embed, p=2, dim=1)
+        item_norm = F.normalize(item_embed, p=2, dim=1)
+        pred_ = (user_norm * item_norm).sum(-1)
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:

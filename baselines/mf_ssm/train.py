@@ -6,6 +6,7 @@ import subprocess
 import numpy as np
 import pandas as pd
 from datetime import datetime
+import torch.nn.functional as F
 
 from model import MF
 from metric import ndcg_func, recall_func, ap_func
@@ -30,7 +31,8 @@ parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--data-dir", type=str, default="../../data")
-parser.add_argument("--dataset-name", type=str, default="kuairec")
+parser.add_argument("--dataset-name", type=str, default="yahoo_r3")
+parser.add_argument("--temperature", type=float, default=0.1)
 
 try:
     args = parser.parse_args()
@@ -48,6 +50,7 @@ evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
 data_dir = args.data_dir
 dataset_name = args.dataset_name
+temperature = args.temperature
 
 
 if torch.cuda.is_available():
@@ -79,6 +82,7 @@ wandb_var = wandb.init(
         "top_k_list" : top_k_list,
         "random_seed" : random_seed,
         "dataset_name" : dataset_name,
+        "temperature" : temperature
     }
 )
 wandb.run.name = f"mf_ssm_{expt_num}"
@@ -171,9 +175,17 @@ for epoch in range(1, num_epochs+1):
         sub_y = y_train[selected_idx]
         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
-        pred, user_embed, item_embed = model(sub_x)
+        _, user_embed, item_embed = model(sub_x)
 
-        rec_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
+        user_norm = F.normalize(user_embed, p=2, dim=1)
+        item_norm = F.normalize(item_embed, p=2, dim=1)
+        pred = F.linear(user_norm, item_norm) / temperature
+        pos_label = torch.eye(batch_size).to(user_embed.device)
+        neg_label = 1 - pos_label
+        pos_feat = (pred.exp() * pos_label).sum(dim=-1)
+        neg_feat = (pred.exp() * neg_label).sum(dim=-1)
+        rec_loss = -torch.log(pos_feat / (pos_feat + neg_feat)).mean()
+
         epoch_rec_loss += rec_loss
 
         total_loss = rec_loss
