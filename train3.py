@@ -221,7 +221,7 @@ for epoch in range(1, num_epochs+1):
         else: 
             raise ValueError("Unknown contrastive learning pair!")
 
-        total_loss = cl_loss
+        total_loss = rec_loss + cl_loss
         epoch_total_loss += total_loss
 
 
