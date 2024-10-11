@@ -142,6 +142,7 @@ reduced_ours_item = model.fit_transform(ours_item)
 sampling_num = 100
 
 #%%
+u = 21
 for u in tqdm(range(num_users)):
     sim_pair_u_idx = user_similar_indices[u].numpy()
     left_users = np.random.choice([user for user in range(num_users) if (user not in sim_pair_u_idx) and user!=u], sampling_num)
@@ -203,14 +204,14 @@ for u in tqdm(range(num_users)):
     ax1.set_xticklabels([])
     ax1.set_yticklabels([])
     ax1.set_zticklabels([])
-    ax1.set_title("NCF", fontsize=20)
+    ax1.set_title("Base", fontsize=20)
 
     ax2.scatter(reduced_ours_user[sub_users, 0], reduced_ours_user[sub_users, 1], reduced_ours_user[sub_users, 2], color=sub_colors, alpha=sub_alphas, marker="o", s=80, edgecolor="white")
     ax2.scatter(reduced_ours_user[u, 0], reduced_ours_user[u, 1], reduced_ours_user[u, 2], color=[0.,0.,0.,1.], alpha=1., marker="x", s=200, edgecolor="white")
     ax2.set_xticklabels([])
     ax2.set_yticklabels([])
     ax2.set_zticklabels([])
-    ax2.set_title("Ours", fontsize=20)
+    ax2.set_title("with CL", fontsize=20)
 
     ax1.grid(True)
     ax2.grid(True)
@@ -222,14 +223,17 @@ for u in tqdm(range(num_users)):
 
     cbar.set_ticks([1, 2, 3, 4, 5])
     cbar.set_ticklabels([1, 2, 3, 4, 5], fontsize=18)
-    cbar.set_label('Similarity Rank', fontsize=18)
+    cbar.set_label('Similarity Rank', fontsize=18, loc="right")
 
     fig.tight_layout(rect=[0, 0.15, 1, 1])  # rect 파라미터를 사용하여 전체 figure의 여백 조정
+    fig.text(0.5, -0.05, '(a) Users',
+        ha='center', va='center', fontsize=20, color='black')
     fig.savefig(f"/Users/wonhyung64/Github/DRS/results/dosnes/user/user_{'{:03d}'.format(u)}")
     plt.close()
 
 
 # %%
+i = 125
 for i in tqdm(range(num_items)):
     sim_pair_i_idx = item_similar_indices[i].numpy()
     left_items = np.random.choice([item for item in range(num_items) if (item not in sim_pair_i_idx) and item!=i], sampling_num)
@@ -277,7 +281,7 @@ for i in tqdm(range(num_items)):
     ax1.set_xticklabels([])
     ax1.set_yticklabels([])
     ax1.set_zticklabels([])
-    ax1.set_title("NCF", fontsize=20)
+    ax1.set_title("Base", fontsize=20)
 
     ax1.w_xaxis.pane.fill = True
     ax1.w_xaxis.pane.set_facecolor('white')
@@ -291,7 +295,7 @@ for i in tqdm(range(num_items)):
     ax2.set_xticklabels([])
     ax2.set_yticklabels([])
     ax2.set_zticklabels([])
-    ax2.set_title("Ours", fontsize=20)
+    ax2.set_title("with CL", fontsize=20)
 
     ax2.w_xaxis.pane.fill = True
     ax2.w_xaxis.pane.set_facecolor('white')
@@ -307,9 +311,11 @@ for i in tqdm(range(num_items)):
 
     cbar.set_ticks([1, 2, 3, 4, 5])
     cbar.set_ticklabels([1, 2, 3, 4, 5], fontsize=18)
-    cbar.set_label('Similarity Rank', fontsize=18)
+    cbar.set_label('Similarity Rank', fontsize=18, loc="right")
 
     fig.tight_layout(rect=[0, 0.15, 1, 1])  # rect 파라미터를 사용하여 전체 figure의 여백 조정
+    fig.text(0.5, -0.05, '(b) Items',
+        ha='center', va='center', fontsize=20, color='black')
     fig.savefig(f"/Users/wonhyung64/Github/DRS/results/dosnes/item/item_{'{:03d}'.format(i)}")
     plt.close()
 
