@@ -89,6 +89,8 @@ config["expt_num"] = expt_num
 config["save_dir"] = save_dir
 
 os.makedirs(f"{save_dir}", exist_ok=True)
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
 
 
 if WANDB_TRACKING:
@@ -97,10 +99,8 @@ if WANDB_TRACKING:
 
 
 #%% DATA LOADER
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-
 data_set_dir = os.path.join(data_dir, dataset_name)
+
 if dataset_name == "yahoo_r3":
     train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
     test_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-test.txt")
@@ -158,7 +158,6 @@ print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
 print("[test]  num data:", x_test.shape[0])
 print("# user: {}, # item: {}".format(num_users, num_items))
-print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
 
 #%% TRAIN
@@ -242,8 +241,6 @@ def generate_total_sample(num_users, num_items):
 def pairwise_loss(pos_pred, neg_pred):
     return torch.nn.Sigmoid()(pos_pred - neg_pred).mean()
 
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
 
 exposure_matrix = sparse.lil_matrix((num_users, num_items))
 for (u, i) in x_train:
