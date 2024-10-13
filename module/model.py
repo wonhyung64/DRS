@@ -50,3 +50,27 @@ class MF(nn.Module):
         out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1)
 
         return out, user_embed, item_embed
+
+
+class Exposure(nn.Module):
+    """The neural collaborative filtering method.
+    """
+    def __init__(self, num_users, num_items, embedding_k):
+        super(Exposure, self).__init__()
+        self.num_users = num_users
+        self.num_items = num_items
+        self.embedding_k = embedding_k
+        self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
+        self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
+        self.scale_param = torch.nn.parameter.Parameter(torch.ones(1))
+
+    def forward(self, x):
+        user_idx = x[:,0]
+        item_idx = x[:,1]
+        user_embed = self.user_embedding(user_idx)
+        item_embed = self.item_embedding(item_idx)
+        user_embed = user_embed - user_embed.mean(dim=1, keepdim=True)
+        item_embed = item_embed - item_embed.mean(dim=1, keepdim=True)
+        out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1)
+
+        return out, user_embed, item_embed

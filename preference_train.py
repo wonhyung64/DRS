@@ -1,5 +1,5 @@
-WANDB_TRACKING = 0
 #%%
+WANDB_TRACKING = 0
 import os
 import sys
 import torch
@@ -158,6 +158,7 @@ print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
 print("[test]  num data:", x_test.shape[0])
 print("# user: {}, # item: {}".format(num_users, num_items))
+print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
 
 #%% TRAIN
@@ -226,171 +227,5 @@ for epoch in range(1, num_epochs+1):
 
 # if WANDB_TRACKING:
 #     wandb.finish()
-
-# %%
-from scipy import sparse
-
-def generate_total_sample(num_users, num_items):
-    sample = []
-    for i in range(num_users):
-        sample.extend([[i,j] for j in range(num_items)])
-
-    return np.array(sample)
-
-
-def pairwise_loss(pos_pred, neg_pred):
-    return torch.nn.Sigmoid()(pos_pred - neg_pred).mean()
-
-
-exposure_matrix = sparse.lil_matrix((num_users, num_items))
-for (u, i) in x_train:
-    exposure_matrix[int(u)-1, int(i)-1] = 1
-exposure_train = sparse.csr_matrix(exposure_matrix)
-
-x_all = generate_total_sample(num_users, num_items)
-o_all = np.array([exposure_matrix[u-1,i-1] for (u,i) in x_all])
-zero_indices = np.argwhere(o_all == 0).squeeze(-1)
-unexposed_pairs_all = x_all[zero_indices, :]
-
-num_neg_sample = num_sample * exposure_neg_size
-num_neg_per_item = num_neg_sample // num_items + 1
-
-unexposed_pairs = []
-for i in range(num_items):
-    unexposed_users = unexposed_pairs_all[unexposed_pairs_all[:, 1] == i]
-    sampling_indices = np.random.choice(np.arange(len(unexposed_users)), num_neg_per_item)
-    unexposed_pairs.append(unexposed_users[sampling_indices])
-unexposed_pairs = np.concatenate(unexposed_pairs, 0) + 1
-
-del exposure_matrix, exposure_train, x_all, o_all, zero_indices, unexposed_pairs_all
-
-
-
-#%%
-exposure_model = MF(num_users, num_items, exposure_factor_dim)
-exposure_model = exposure_model.to(device)
-optimizer = torch.optim.Adam(exposure_model.parameters(), lr=exposure_lr, weight_decay=exposure_weight_decay)
-
-if exposure_neg_size == 1:
-    loss_fcn = pairwise_loss
-elif exposure_neg_size > 1:
-    pass
-else:
-    raise ValueError("unknown exposure_neg_size")
-
-all_idx = np.arange(num_sample)
-# for epoch in range(1, num_epochs+1):
-for epoch in range(1, num_epochs*num_neg_sample+1):
-    np.random.shuffle(all_idx)
-    np.random.shuffle(unexposed_pairs)
-
-    exposure_model.train()
-    epoch_exposure_loss = 0.
-
-    for idx in range(total_batch):
-        selected_idx = all_idx[exposure_batch_size*idx : (idx+1)*exposure_batch_size]
-        sub_x = x_train[selected_idx]
-        sub_x = torch.LongTensor(sub_x - 1).to(device)
-        unexposed_x = unexposed_pairs[selected_idx]
-
-        unexposed_x = unexposed_pairs[selected_idx]
-        unexposed_x = torch.LongTensor(unexposed_x - 1).to(device)
-
-        exposed_pred, exposed_user_embed, exposed_item_embed = exposure_model(sub_x)
-        unexposed_pred, unexposed_user_embed, exposed_item_embed = exposure_model(unexposed_x)
-
-        exposure_loss = loss_fcn(exposed_pred, unexposed_pred)
-        epoch_exposure_loss += exposure_loss
-
-        optimizer.zero_grad()
-        exposure_loss.backward()
-        optimizer.step()
-
-    print(f"[Epoch {epoch:>4d} Train Loss] exposure: {epoch_exposure_loss.item():.4f}")
-
-    loss_dict: dict = {
-        'epoch_exposure_loss': float(epoch_exposure_loss.item()),
-    }
-
-    if WANDB_TRACKING:
-        wandb_var.log(loss_dict)
-
-
-#%% EM-algorithm
-import torch.nn as nn
-
-class Posterior(nn.Module):
-    def __init__(self, preference_model, exposure_model):
-        super(Posterior, self).__init__()
-        self.gamma = nn.Parameter(torch.randn(1), requires_grad=True)
-
-        self.preference_model = preference_model
-        for param in self.preference_model.parameters():
-            param.requires_grad = False
-
-        self.exposure_model = exposure_model
-        for param in self.exposure_model.parameters():
-            param.requires_grad = False
-
-    def forward(self, x):
-        preference_pred, _, __ = self.preference_model(x)
-        preference_pred = nn.Sigmoid()(preference_pred)
-        exposure_pred, _, __ = self.exposure_model(x)
-        exposure_odds = torch.exp(exposure_pred + self.gamma)
-        posterior = preference_pred / (1 + exposure_odds * (1 - preference_pred))
-        return posterior
-
-
-def q_objective_fn(x, y_o, posterior):
-    preference_logit, _, __ = posterior.preference_model(x)
-    preference_prob = nn.Sigmoid()(preference_logit)
-
-    exposure_logit, _, __ = posterior.exposure_model(x)
-    exposure_prob = nn.Sigmoid()(exposure_logit + posterior.gamma)
-
-    q_y1_o1_mask = (y_o.sum(-1) == 2).float().unsqueeze(-1)
-    q_y0_o1_mask = (y_o.sum(-1) == 1).float().unsqueeze(-1)
-    q_y0_o0_mask = (y_o.sum(-1) == 0).float().unsqueeze(-1)
-
-    q_y1_o1 = q_y1_o1_fn(x, preference_prob, exposure_prob) * q_y1_o1_mask
-    q_y0_o1 = q_y0_o1_fn(x, preference_prob, exposure_prob) * q_y0_o1_mask
-    q_y0_o0 = q_y0_o0_fn(x, preference_prob, exposure_prob, posterior) * q_y0_o0_mask
-
-    return (q_y1_o1 + q_y0_o1 + q_y0_o0).mean()
-
-
-def q_y1_o1_fn(x, preference_prob, exposure_prob):
-    return torch.log(preference_prob * exposure_prob)
-
-
-def q_y0_o1_fn(x, preference_prob, exposure_prob):
-    return torch.log((1 - preference_prob) * exposure_prob)
-
-
-def q_y0_o0_fn(x, preference_prob, exposure_prob, posterior):
-    posterior_r1 = posterior(x)
-    posterior_r0 = 1 - posterior_r1
-
-    q_y0_o0_r1 = posterior_r1 * torch.log(preference_prob * (1 - exposure_prob))
-    q_y0_o0_r0 = posterior_r0 * torch.log((1 - preference_prob) * (1 - exposure_prob))
-
-    return q_y0_o0_r1 + q_y0_o0_r0
-
-
-posterior = Posterior(preference_model, exposure_model)
-posterior = posterior.to(device)
-optimizer = torch.optim.Adam(posterior.parameters(), lr=em_lr)
-
-posterior.train()
-
-y_o = torch.tensor([[0,1], [0,0], [1,1]]).to(device)
-x = sub_x[:3]
-
-q_objective = -q_objective_fn(x, y_o, posterior)
-optimizer.zero_grad()
-q_objective.backward()
-optimizer.step()
-print(posterior.gamma)
-
 
 # %%

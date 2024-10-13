@@ -16,7 +16,7 @@ def ndcg_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        pred_ = model(x_u)
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:
@@ -48,7 +48,7 @@ def recall_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        pred_ = model(x_u)
         pred = pred_.flatten().cpu().detach()
         total_rel = sum(y_u == 1)
 
@@ -76,7 +76,7 @@ def ap_func(model, x_test, y_test, device, top_k_list):
         u_item_idx = all_tr_idx[x_test[:, 0] == uid]
         x_u = torch.LongTensor(x_test[u_item_idx]-1).to(device)
         y_u = y_test[u_item_idx]
-        pred_, _, _ = model(x_u)
+        pred_ = model(x_u)
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:

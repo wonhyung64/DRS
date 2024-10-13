@@ -326,5 +326,36 @@ for epoch in range(1, num_epochs+1):
         }
         wandb_var.log(loss_dict)
 
+    if epoch % evaluate_interval == 0:
+        posterior.eval()
+
+        ndcg_res = ndcg_func(posterior, x_test, y_test, device, top_k_list)
+        recall_res = recall_func(posterior, x_test, y_test, device, top_k_list)
+        ap_res = ap_func(posterior, x_test, y_test, device, top_k_list)
+
+        ndcg_dict: dict = {}
+        for top_k in top_k_list:
+            ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
+
+        recall_dict: dict = {}
+        for top_k in top_k_list:
+            recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
+
+        ap_dict: dict = {}
+        for top_k in top_k_list:
+            ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
+
+        print(f"NDCG: {ndcg_dict}")
+        print(f"Recall: {recall_dict}")
+        print(f"AP: {ap_dict}")
+
+        if WANDB_TRACKING:
+
+                wandb_var.log(ndcg_dict)
+                wandb_var.log(recall_dict)
+                wandb_var.log(ap_dict)
+
+if WANDB_TRACKING:
+    wandb.finish()
 
 # %%

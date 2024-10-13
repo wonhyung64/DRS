@@ -7,11 +7,13 @@ import argparse
 import subprocess
 import numpy as np
 import pandas as pd
+from scipy import sparse
 from datetime import datetime
 
-from module.model import MF
+from module.model import Exposure
 from module.metric import ndcg_func, recall_func, ap_func
 from module.utils import binarize
+
 
 # try:
 #     import wandb
@@ -21,6 +23,21 @@ from module.utils import binarize
 # finally: 
 #     WANDB_TRACKING = 1
 
+
+def generate_total_sample(num_users, num_items):
+    sample = []
+    for i in range(num_users):
+        sample.extend([[i,j] for j in range(num_items)])
+
+    return np.array(sample)
+
+
+def pairwise_loss(total_pred):
+    return torch.nn.Sigmoid()(total_pred[:,0] - total_pred[:,1]).mean()
+
+
+def listwise_loss(total_pred):
+    return -torch.log(total_pred[:,0].exp() / total_pred.exp().sum(-1)).mean()
 
 #%% SETTINGS
 parser = argparse.ArgumentParser()
@@ -34,7 +51,8 @@ parser.add_argument("--exposure-factor-dim", type=int, default=4)
 parser.add_argument("--exposure-lr", type=float, default=1e-2)
 parser.add_argument("--exposure-weight-decay", type=float, default=1e-4)
 parser.add_argument("--exposure-batch-size", type=int, default=2048)
-parser.add_argument("--exposure_neg_size", type=int, default=1)
+parser.add_argument("--exposure_neg_size", type=int, default=2)
+parser.add_argument("--exposure-num-epochs", type=int, default=100)
 
 parser.add_argument("--em-lr", type=float, default=1e-2)
 parser.add_argument("--em-batch-size", type=int, default=2048)
@@ -62,6 +80,7 @@ exposure_lr = args.exposure_lr
 exposure_weight_decay = args.exposure_weight_decay
 exposure_batch_size = args.exposure_batch_size
 exposure_neg_size = args.exposure_neg_size
+exposure_num_epochs = args.exposure_num_epochs
 
 em_lr = args.em_lr
 em_batch_size = args.em_batch_size
@@ -158,90 +177,10 @@ print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])
 print("[test]  num data:", x_test.shape[0])
 print("# user: {}, # item: {}".format(num_users, num_items))
+print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
-
-#%% TRAIN
-preference_model = MF(num_users, num_items, preference_factor_dim)
-preference_model = preference_model.to(device)
-optimizer = torch.optim.Adam(preference_model.parameters(), lr=preference_lr, weight_decay=preference_weight_decay)
-loss_fcn = torch.nn.BCELoss()
-
-all_idx = np.arange(num_sample)
-for epoch in range(1, num_epochs+1):
-    np.random.shuffle(all_idx)
-    preference_model.train()
-    epoch_preference_loss = 0.
-
-    for idx in range(total_batch):
-        selected_idx = all_idx[preference_batch_size*idx : (idx+1)*preference_batch_size]
-        sub_x = x_train[selected_idx]
-        sub_x = torch.LongTensor(sub_x - 1).to(device)
-        sub_y = y_train[selected_idx]
-        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
-
-        pred, user_embed, item_embed = preference_model(sub_x)
-
-        preference_loss = loss_fcn(torch.nn.Sigmoid()(pred), sub_y)
-        epoch_preference_loss += preference_loss
-
-        optimizer.zero_grad()
-        preference_loss.backward()
-        optimizer.step()
-
-    print(f"[Epoch {epoch:>4d} Train Loss] preference: {epoch_preference_loss.item():.4f}")
-
-    loss_dict: dict = {
-        'epoch_preference_loss': float(epoch_preference_loss.item()),
-    }
-
-    if WANDB_TRACKING:
-        wandb_var.log(loss_dict)
-
-#     if epoch % evaluate_interval == 0:
-#         model.eval()
-
-#         ndcg_res = ndcg_func(model, x_test, y_test, device, top_k_list)
-#         ndcg_dict: dict = {}
-#         for top_k in top_k_list:
-#             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
-
-#         recall_res = recall_func(model, x_test, y_test, device, top_k_list)
-#         recall_dict: dict = {}
-#         for top_k in top_k_list:
-#             recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
-
-#         ap_res = ap_func(model, x_test, y_test, device, top_k_list)
-#         ap_dict: dict = {}
-#         for top_k in top_k_list:
-#             ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
-
-#         if WANDB_TRACKING:
-#             wandb_var.log(ndcg_dict)
-#             wandb_var.log(recall_dict)
-#             wandb_var.log(ap_dict)
-
-# print(f"NDCG: {ndcg_dict}")
-# print(f"Recall: {recall_dict}")
-# print(f"AP: {ap_dict}")
-
-# if WANDB_TRACKING:
-#     wandb.finish()
 
 # %%
-from scipy import sparse
-
-def generate_total_sample(num_users, num_items):
-    sample = []
-    for i in range(num_users):
-        sample.extend([[i,j] for j in range(num_items)])
-
-    return np.array(sample)
-
-
-def pairwise_loss(pos_pred, neg_pred):
-    return torch.nn.Sigmoid()(pos_pred - neg_pred).mean()
-
-
 exposure_matrix = sparse.lil_matrix((num_users, num_items))
 for (u, i) in x_train:
     exposure_matrix[int(u)-1, int(i)-1] = 1
@@ -267,43 +206,61 @@ del exposure_matrix, exposure_train, x_all, o_all, zero_indices, unexposed_pairs
 
 
 #%%
-exposure_model = MF(num_users, num_items, exposure_factor_dim)
+exposure_model = Exposure(num_users, num_items, exposure_factor_dim)
 exposure_model = exposure_model.to(device)
 optimizer = torch.optim.Adam(exposure_model.parameters(), lr=exposure_lr, weight_decay=exposure_weight_decay)
 
 if exposure_neg_size == 1:
     loss_fcn = pairwise_loss
 elif exposure_neg_size > 1:
-    pass
+    loss_fcn = listwise_loss
 else:
     raise ValueError("unknown exposure_neg_size")
 
 all_idx = np.arange(num_sample)
-# for epoch in range(1, num_epochs+1):
-for epoch in range(1, num_epochs*num_neg_sample+1):
+for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
     np.random.shuffle(all_idx)
     np.random.shuffle(unexposed_pairs)
 
     exposure_model.train()
     epoch_exposure_loss = 0.
+    epoch_exposed_user_reg = 0.
+    epoch_exposed_item_reg = 0.
+    epoch_unexposed_user_reg = 0.
+    epoch_unexposed_item_reg = 0.
 
     for idx in range(total_batch):
         selected_idx = all_idx[exposure_batch_size*idx : (idx+1)*exposure_batch_size]
         sub_x = x_train[selected_idx]
         sub_x = torch.LongTensor(sub_x - 1).to(device)
-        unexposed_x = unexposed_pairs[selected_idx]
 
-        unexposed_x = unexposed_pairs[selected_idx]
+        neg_idx = []
+        for neg_size in range(exposure_neg_size):
+            neg_start_idx = neg_size * (exposure_batch_size * total_batch)
+            neg_idx.append(np.arange(neg_start_idx + exposure_batch_size*idx, neg_start_idx + exposure_batch_size*(idx+1)))
+        neg_idx = np.concatenate(neg_idx)
+        unexposed_x = unexposed_pairs[neg_idx]
         unexposed_x = torch.LongTensor(unexposed_x - 1).to(device)
 
         exposed_pred, exposed_user_embed, exposed_item_embed = exposure_model(sub_x)
-        unexposed_pred, unexposed_user_embed, exposed_item_embed = exposure_model(unexposed_x)
+        unexposed_pred, unexposed_user_embed, unexposed_item_embed = exposure_model(unexposed_x)
+        total_pred = torch.cat([exposed_pred, unexposed_pred.reshape([exposure_batch_size, exposure_neg_size])], dim=-1)
 
-        exposure_loss = loss_fcn(exposed_pred, unexposed_pred)
+        exposure_loss = loss_fcn(total_pred)
+        exposed_user_reg = torch.norm(exposed_user_embed - exposed_user_embed.mean(dim=1, keepdim=True))
+        exposed_item_reg = torch.norm(exposed_item_embed - exposed_item_embed.mean(dim=1, keepdim=True))
+        unexposed_user_reg = torch.norm(unexposed_user_embed - unexposed_user_embed.mean(dim=1, keepdim=True))
+        unexposed_item_reg = torch.norm(unexposed_item_embed - unexposed_item_embed.mean(dim=1, keepdim=True))
+        total_loss = exposure_loss + exposed_user_reg + exposed_item_reg + unexposed_user_reg + unexposed_item_reg
+
         epoch_exposure_loss += exposure_loss
+        epoch_exposed_user_reg += exposed_user_reg
+        epoch_exposed_item_reg += exposed_item_reg
+        epoch_unexposed_user_reg += unexposed_user_reg
+        epoch_unexposed_item_reg += unexposed_item_reg
 
         optimizer.zero_grad()
-        exposure_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
     print(f"[Epoch {epoch:>4d} Train Loss] exposure: {epoch_exposure_loss.item():.4f}")
@@ -314,83 +271,5 @@ for epoch in range(1, num_epochs*num_neg_sample+1):
 
     if WANDB_TRACKING:
         wandb_var.log(loss_dict)
-
-
-#%% EM-algorithm
-import torch.nn as nn
-
-class Posterior(nn.Module):
-    def __init__(self, preference_model, exposure_model):
-        super(Posterior, self).__init__()
-        self.gamma = nn.Parameter(torch.randn(1), requires_grad=True)
-
-        self.preference_model = preference_model
-        for param in self.preference_model.parameters():
-            param.requires_grad = False
-
-        self.exposure_model = exposure_model
-        for param in self.exposure_model.parameters():
-            param.requires_grad = False
-
-    def forward(self, x):
-        preference_pred, _, __ = self.preference_model(x)
-        preference_pred = nn.Sigmoid()(preference_pred)
-        exposure_pred, _, __ = self.exposure_model(x)
-        exposure_odds = torch.exp(exposure_pred + self.gamma)
-        posterior = preference_pred / (1 + exposure_odds * (1 - preference_pred))
-        return posterior
-
-
-def q_objective_fn(x, y_o, posterior):
-    preference_logit, _, __ = posterior.preference_model(x)
-    preference_prob = nn.Sigmoid()(preference_logit)
-
-    exposure_logit, _, __ = posterior.exposure_model(x)
-    exposure_prob = nn.Sigmoid()(exposure_logit + posterior.gamma)
-
-    q_y1_o1_mask = (y_o.sum(-1) == 2).float().unsqueeze(-1)
-    q_y0_o1_mask = (y_o.sum(-1) == 1).float().unsqueeze(-1)
-    q_y0_o0_mask = (y_o.sum(-1) == 0).float().unsqueeze(-1)
-
-    q_y1_o1 = q_y1_o1_fn(x, preference_prob, exposure_prob) * q_y1_o1_mask
-    q_y0_o1 = q_y0_o1_fn(x, preference_prob, exposure_prob) * q_y0_o1_mask
-    q_y0_o0 = q_y0_o0_fn(x, preference_prob, exposure_prob, posterior) * q_y0_o0_mask
-
-    return (q_y1_o1 + q_y0_o1 + q_y0_o0).mean()
-
-
-def q_y1_o1_fn(x, preference_prob, exposure_prob):
-    return torch.log(preference_prob * exposure_prob)
-
-
-def q_y0_o1_fn(x, preference_prob, exposure_prob):
-    return torch.log((1 - preference_prob) * exposure_prob)
-
-
-def q_y0_o0_fn(x, preference_prob, exposure_prob, posterior):
-    posterior_r1 = posterior(x)
-    posterior_r0 = 1 - posterior_r1
-
-    q_y0_o0_r1 = posterior_r1 * torch.log(preference_prob * (1 - exposure_prob))
-    q_y0_o0_r0 = posterior_r0 * torch.log((1 - preference_prob) * (1 - exposure_prob))
-
-    return q_y0_o0_r1 + q_y0_o0_r0
-
-
-posterior = Posterior(preference_model, exposure_model)
-posterior = posterior.to(device)
-optimizer = torch.optim.Adam(posterior.parameters(), lr=em_lr)
-
-posterior.train()
-
-y_o = torch.tensor([[0,1], [0,0], [1,1]]).to(device)
-x = sub_x[:3]
-
-q_objective = -q_objective_fn(x, y_o, posterior)
-optimizer.zero_grad()
-q_objective.backward()
-optimizer.step()
-print(posterior.gamma)
-
 
 # %%
