@@ -118,6 +118,10 @@ elif dataset_name == "kuairec":
     x_test = x_test[["user_id", "video_id", "interaction"]].to_numpy()
     x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
 
+elif dataset_name == "ml-1m":
+    x_train = np.load(f"{data_set_dir}/train.npy")
+    x_test = np.load(f"{data_set_dir}/test.npy")
+
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
@@ -175,41 +179,8 @@ for epoch in range(1, preference_num_epochs+1):
 
     print(f"[Epoch {epoch:>4d} Train Loss] preference: {epoch_preference_loss.item():.4f}")
 
-    loss_dict: dict = {
-        'epoch_preference_loss': float(epoch_preference_loss.item()),
-    }
-
     if WANDB_TRACKING:
+        loss_dict: dict = {
+            'epoch_preference_loss': float(epoch_preference_loss.item()),
+        }
         wandb_var.log(loss_dict)
-
-#     if epoch % evaluate_interval == 0:
-#         model.eval()
-
-#         ndcg_res = ndcg_func(model, x_test, y_test, device, top_k_list)
-#         ndcg_dict: dict = {}
-#         for top_k in top_k_list:
-#             ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
-
-#         recall_res = recall_func(model, x_test, y_test, device, top_k_list)
-#         recall_dict: dict = {}
-#         for top_k in top_k_list:
-#             recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
-
-#         ap_res = ap_func(model, x_test, y_test, device, top_k_list)
-#         ap_dict: dict = {}
-#         for top_k in top_k_list:
-#             ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
-
-#         if WANDB_TRACKING:
-#             wandb_var.log(ndcg_dict)
-#             wandb_var.log(recall_dict)
-#             wandb_var.log(ap_dict)
-
-# print(f"NDCG: {ndcg_dict}")
-# print(f"Recall: {recall_dict}")
-# print(f"AP: {ap_dict}")
-
-# if WANDB_TRACKING:
-#     wandb.finish()
-
-# %%

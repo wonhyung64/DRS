@@ -107,8 +107,8 @@ parser.add_argument("--em-num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
-parser.add_argument("--data-dir", type=str, default="../../data")
-parser.add_argument("--dataset-name", type=str, default="coat") # [coat, kuairec, yahoo]
+parser.add_argument("--data-dir", type=str, default="./data")
+parser.add_argument("--dataset-name", type=str, default="ml-1m") # [coat, kuairec, yahoo_r3, ml-1m]
 
 try:
     args = parser.parse_args()
@@ -119,7 +119,7 @@ exposure_neg_size = args.exposure_neg_size
 
 em_lr = args.em_lr
 em_batch_size = args.em_batch_size
-em_num_epochs = args.num_epochs
+em_num_epochs = args.em_num_epochs
 
 random_seed = args.random_seed
 evaluate_interval = args.evaluate_interval
@@ -189,6 +189,10 @@ elif dataset_name == "kuairec":
     x_test["interaction"] = x_test["watch_ratio"].map(lambda x: 1 if x >= 2. else 0)
     x_test = x_test[["user_id", "video_id", "interaction"]].to_numpy()
     x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
+
+elif dataset_name == "ml-1m":
+    x_train = np.load(f"{data_set_dir}/train.npy")
+    x_test = np.load(f"{data_set_dir}/test.npy")
 
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]

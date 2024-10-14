@@ -144,6 +144,10 @@ elif dataset_name == "kuairec":
     x_test = x_test[["user_id", "video_id", "interaction"]].to_numpy()
     x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
 
+elif dataset_name == "ml-1m":
+    x_train = np.load(f"{data_set_dir}/train.npy")
+    x_test = np.load(f"{data_set_dir}/test.npy")
+
 x_train, y_train = x_train[:,:-1], x_train[:,-1]
 x_test, y_test = x_test[:, :-1], x_test[:,-1]
 
