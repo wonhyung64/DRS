@@ -144,8 +144,8 @@ config["expt_num"] = expt_num
 config["save_dir"] = save_dir
 
 if WANDB_TRACKING:
-    wandb_var = wandb.init(project="drs", config=config)
-    wandb.run.name = f"main_{expt_num}"
+    wandb_var = wandb.init(project="recommender", config=config)
+    wandb.run.name = f"em_{expt_num}"
 
 
 #%% OBSERVED DATA LOADER

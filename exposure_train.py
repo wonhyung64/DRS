@@ -97,8 +97,8 @@ config["expt_num"] = expt_num
 config["save_dir"] = save_dir
 
 if WANDB_TRACKING:
-    wandb_var = wandb.init(project="drs", config=config)
-    wandb.run.name = f"exposure_{expt_num}"
+    wandb_var = wandb.init(project="recommender", config=config)
+    wandb.run.name = f"expo_{expt_num}"
 
 
 #%% DATA LOADER
