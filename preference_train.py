@@ -29,17 +29,8 @@ parser.add_argument("--preference-factor-dim", type=int, default=4)
 parser.add_argument("--preference-lr", type=float, default=1e-2)
 parser.add_argument("--preference-weight-decay", type=float, default=1e-4)
 parser.add_argument("--preference-batch-size", type=int, default=2048)
+parser.add_argument("--preference-num-epochs", type=int, default=1000)
 
-parser.add_argument("--exposure-factor-dim", type=int, default=4)
-parser.add_argument("--exposure-lr", type=float, default=1e-2)
-parser.add_argument("--exposure-weight-decay", type=float, default=1e-4)
-parser.add_argument("--exposure-batch-size", type=int, default=2048)
-parser.add_argument("--exposure_neg_size", type=int, default=1)
-
-parser.add_argument("--em-lr", type=float, default=1e-2)
-parser.add_argument("--em-batch-size", type=int, default=2048)
-
-parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
@@ -56,17 +47,8 @@ preference_factor_dim = args.preference_factor_dim
 preference_lr = args.preference_lr
 preference_weight_decay = args.preference_weight_decay
 preference_batch_size = args.preference_batch_size
+preference_num_epochs = args.preference_num_epochs
 
-exposure_factor_dim = args.exposure_factor_dim
-exposure_lr = args.exposure_lr
-exposure_weight_decay = args.exposure_weight_decay
-exposure_batch_size = args.exposure_batch_size
-exposure_neg_size = args.exposure_neg_size
-
-em_lr = args.em_lr
-em_batch_size = args.em_batch_size
-
-num_epochs = args.num_epochs
 random_seed = args.random_seed
 evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
@@ -168,7 +150,7 @@ optimizer = torch.optim.Adam(preference_model.parameters(), lr=preference_lr, we
 loss_fcn = torch.nn.BCELoss()
 
 all_idx = np.arange(num_sample)
-for epoch in range(1, num_epochs+1):
+for epoch in range(1, preference_num_epochs+1):
     np.random.shuffle(all_idx)
     preference_model.train()
     epoch_preference_loss = 0.

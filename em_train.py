@@ -98,21 +98,12 @@ def q_y0_o0_fn(x, preference_prob, exposure_prob, posterior):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--preference-factor-dim", type=int, default=4)
-parser.add_argument("--preference-lr", type=float, default=1e-2)
-parser.add_argument("--preference-weight-decay", type=float, default=1e-4)
-parser.add_argument("--preference-batch-size", type=int, default=2048)
-
-parser.add_argument("--exposure-factor-dim", type=int, default=4)
-parser.add_argument("--exposure-lr", type=float, default=1e-2)
-parser.add_argument("--exposure-weight-decay", type=float, default=1e-4)
-parser.add_argument("--exposure-batch-size", type=int, default=2048)
 parser.add_argument("--exposure_neg_size", type=int, default=1)
 
 parser.add_argument("--em-lr", type=float, default=1e-2)
 parser.add_argument("--em-batch-size", type=int, default=2048)
+parser.add_argument("--em-num-epochs", type=int, default=1000)
 
-parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
@@ -125,21 +116,12 @@ except:
     args = parser.parse_args([])
 
 
-preference_factor_dim = args.preference_factor_dim
-preference_lr = args.preference_lr
-preference_weight_decay = args.preference_weight_decay
-preference_batch_size = args.preference_batch_size
-
-exposure_factor_dim = args.exposure_factor_dim
-exposure_lr = args.exposure_lr
-exposure_weight_decay = args.exposure_weight_decay
-exposure_batch_size = args.exposure_batch_size
 exposure_neg_size = args.exposure_neg_size
 
 em_lr = args.em_lr
 em_batch_size = args.em_batch_size
+em_num_epochs = args.num_epochs
 
-num_epochs = args.num_epochs
 random_seed = args.random_seed
 evaluate_interval = args.evaluate_interval
 top_k_list = args.top_k_list
@@ -162,8 +144,6 @@ config["expt_num"] = expt_num
 config["save_dir"] = save_dir
 
 os.makedirs(f"{save_dir}", exist_ok=True)
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
 
 if WANDB_TRACKING:
     wandb_var = wandb.init(project="drs", config=config)
@@ -171,9 +151,6 @@ if WANDB_TRACKING:
 
 
 #%% OBSERVED DATA LOADER
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-
 data_set_dir = os.path.join(data_dir, dataset_name)
 if dataset_name == "yahoo_r3":
     train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
@@ -223,7 +200,7 @@ if dataset_name != "kuairec":
     y_test = binarize(y_test)
 
 num_sample = len(x_train)
-total_batch = num_sample // preference_batch_size
+total_batch = num_sample // em_batch_size
 
 num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
@@ -279,13 +256,16 @@ optimizer = torch.optim.Adam(posterior.parameters(), lr=em_lr)
 
 
 #%% EM-algorithm
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
+
 num_pos_exposure = len(x_train)
 num_neg_exposure = len(unexposed_pairs)
 total_batch = num_pos_exposure // (em_batch_size//2)
 pos_exposure_idx = np.arange(num_pos_exposure)
 neg_exposure_idx = np.arange(num_neg_exposure)
 
-for epoch in range(1, num_epochs+1):
+for epoch in range(1, em_num_epochs+1):
     np.random.shuffle(pos_exposure_idx)
     np.random.shuffle(neg_exposure_idx)
 
@@ -350,10 +330,9 @@ for epoch in range(1, num_epochs+1):
         print(f"AP: {ap_dict}")
 
         if WANDB_TRACKING:
-
-                wandb_var.log(ndcg_dict)
-                wandb_var.log(recall_dict)
-                wandb_var.log(ap_dict)
+            wandb_var.log(ndcg_dict)
+            wandb_var.log(recall_dict)
+            wandb_var.log(ap_dict)
 
 if WANDB_TRACKING:
     wandb.finish()

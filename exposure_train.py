@@ -11,7 +11,6 @@ from scipy import sparse
 from datetime import datetime
 
 from module.model import Exposure
-from module.metric import ndcg_func, recall_func, ap_func
 from module.utils import binarize
 
 
@@ -42,25 +41,20 @@ def listwise_loss(total_pred):
 #%% SETTINGS
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--preference-factor-dim", type=int, default=4)
-parser.add_argument("--preference-lr", type=float, default=1e-2)
-parser.add_argument("--preference-weight-decay", type=float, default=1e-4)
-parser.add_argument("--preference-batch-size", type=int, default=2048)
-
 parser.add_argument("--exposure-factor-dim", type=int, default=4)
 parser.add_argument("--exposure-lr", type=float, default=1e-2)
 parser.add_argument("--exposure-weight-decay", type=float, default=1e-4)
 parser.add_argument("--exposure-batch-size", type=int, default=2048)
 parser.add_argument("--exposure_neg_size", type=int, default=2)
 parser.add_argument("--exposure-num-epochs", type=int, default=100)
+parser.add_argument("--save-weights-interval", type=int, default=10)
 
-parser.add_argument("--em-lr", type=float, default=1e-2)
-parser.add_argument("--em-batch-size", type=int, default=2048)
+parser.add_argument("--lambda-exposed-user-reg", type=float, default=1.)
+parser.add_argument("--lambda-exposed-item-reg", type=float, default=1.)
+parser.add_argument("--lambda-unexposed-user-reg", type=float, default=1.)
+parser.add_argument("--lambda-unexposed-item-reg", type=float, default=1.)
 
-parser.add_argument("--num-epochs", type=int, default=1000)
 parser.add_argument("--random-seed", type=int, default=0)
-parser.add_argument("--evaluate-interval", type=int, default=50)
-parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--data-dir", type=str, default="../../data")
 parser.add_argument("--dataset-name", type=str, default="coat") # [coat, kuairec, yahoo]
 
@@ -70,25 +64,20 @@ except:
     args = parser.parse_args([])
 
 
-preference_factor_dim = args.preference_factor_dim
-preference_lr = args.preference_lr
-preference_weight_decay = args.preference_weight_decay
-preference_batch_size = args.preference_batch_size
-
 exposure_factor_dim = args.exposure_factor_dim
 exposure_lr = args.exposure_lr
 exposure_weight_decay = args.exposure_weight_decay
 exposure_batch_size = args.exposure_batch_size
 exposure_neg_size = args.exposure_neg_size
 exposure_num_epochs = args.exposure_num_epochs
+save_weights_interval = args.save_weights_interval
 
-em_lr = args.em_lr
-em_batch_size = args.em_batch_size
+lambda_exposed_user_reg = args.lambda_exposed_user_reg
+lambda_exposed_item_reg = args.lambda_exposed_item_reg
+lambda_unexposed_user_reg = args.lambda_unexposed_user_reg
+lambda_unexposed_item_reg = args.lambda_unexposed_item_reg
 
-num_epochs = args.num_epochs
 random_seed = args.random_seed
-evaluate_interval = args.evaluate_interval
-top_k_list = args.top_k_list
 data_dir = args.data_dir
 dataset_name = args.dataset_name
 
@@ -100,21 +89,18 @@ else:
     device = "cpu"
 
 expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
-save_dir = f"./weights/expt_{expt_num}"
+save_dir = f"./weights/exposure/expt_{expt_num}"
+os.makedirs(f"{save_dir}", exist_ok=True)
 
 config = vars(args)
 config["device"] = device
 config["expt_num"] = expt_num
 config["save_dir"] = save_dir
 
-os.makedirs(f"{save_dir}", exist_ok=True)
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-
 
 if WANDB_TRACKING:
     wandb_var = wandb.init(project="drs", config=config)
-    wandb.run.name = f"main_{expt_num}"
+    wandb.run.name = f"exposure_{expt_num}"
 
 
 #%% DATA LOADER
@@ -168,7 +154,7 @@ if dataset_name != "kuairec":
     y_test = binarize(y_test)
 
 num_sample = len(x_train)
-total_batch = num_sample // preference_batch_size
+total_batch = num_sample // exposure_batch_size
 
 num_users = x_train[:,0].max()
 num_items = x_train[:,1].max()
@@ -180,7 +166,10 @@ print("# user: {}, # item: {}".format(num_users, num_items))
 print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
 
-# %%
+# %% LOAD UNEXPOSED PAIRS
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
+
 exposure_matrix = sparse.lil_matrix((num_users, num_items))
 for (u, i) in x_train:
     exposure_matrix[int(u)-1, int(i)-1] = 1
@@ -204,8 +193,10 @@ unexposed_pairs = np.concatenate(unexposed_pairs, 0) + 1
 del exposure_matrix, exposure_train, x_all, o_all, zero_indices, unexposed_pairs_all
 
 
+#%% LOAD MODEL
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
 
-#%%
 exposure_model = Exposure(num_users, num_items, exposure_factor_dim)
 exposure_model = exposure_model.to(device)
 optimizer = torch.optim.Adam(exposure_model.parameters(), lr=exposure_lr, weight_decay=exposure_weight_decay)
@@ -216,6 +207,11 @@ elif exposure_neg_size > 1:
     loss_fcn = listwise_loss
 else:
     raise ValueError("unknown exposure_neg_size")
+
+
+#%%
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
 
 all_idx = np.arange(num_sample)
 for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
@@ -247,10 +243,10 @@ for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
         total_pred = torch.cat([exposed_pred, unexposed_pred.reshape([exposure_batch_size, exposure_neg_size])], dim=-1)
 
         exposure_loss = loss_fcn(total_pred)
-        exposed_user_reg = torch.norm(exposed_user_embed - exposed_user_embed.mean(dim=1, keepdim=True))
-        exposed_item_reg = torch.norm(exposed_item_embed - exposed_item_embed.mean(dim=1, keepdim=True))
-        unexposed_user_reg = torch.norm(unexposed_user_embed - unexposed_user_embed.mean(dim=1, keepdim=True))
-        unexposed_item_reg = torch.norm(unexposed_item_embed - unexposed_item_embed.mean(dim=1, keepdim=True))
+        exposed_user_reg = torch.norm(exposed_user_embed - exposed_user_embed.mean(dim=1, keepdim=True)) * lambda_exposed_user_reg
+        exposed_item_reg = torch.norm(exposed_item_embed - exposed_item_embed.mean(dim=1, keepdim=True)) * lambda_exposed_item_reg
+        unexposed_user_reg = torch.norm(unexposed_user_embed - unexposed_user_embed.mean(dim=1, keepdim=True)) * lambda_unexposed_user_reg
+        unexposed_item_reg = torch.norm(unexposed_item_embed - unexposed_item_embed.mean(dim=1, keepdim=True)) * lambda_unexposed_item_reg
         total_loss = exposure_loss + exposed_user_reg + exposed_item_reg + unexposed_user_reg + unexposed_item_reg
 
         epoch_exposure_loss += exposure_loss
@@ -265,11 +261,17 @@ for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
 
     print(f"[Epoch {epoch:>4d} Train Loss] exposure: {epoch_exposure_loss.item():.4f}")
 
-    loss_dict: dict = {
-        'epoch_exposure_loss': float(epoch_exposure_loss.item()),
-    }
-
     if WANDB_TRACKING:
+        loss_dict: dict = {
+            'epoch_exposure_loss': float(epoch_exposure_loss.item()),
+            'epoch_exposed_user_reg': float(epoch_exposed_user_reg.item()),
+            'epoch_exposed_item_reg': float(epoch_exposed_item_reg.item()),
+            'epoch_unexposed_user_reg': float(epoch_unexposed_user_reg.item()),
+            'epoch_unexposed_item_reg': float(epoch_unexposed_item_reg.item()),
+        }
         wandb_var.log(loss_dict)
+
+    if epoch % (save_weights_interval * num_neg_sample) == 0:
+        torch.save(exposure_model, f"{save_dir}/e{str(epoch//num_neg_sample).zfill(3)}.pth")
 
 # %%
