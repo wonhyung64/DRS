@@ -14,13 +14,13 @@ from module.model import Exposure
 from module.utils import binarize
 
 
-# try:
-#     import wandb
-# except: 
-#     subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
-#     import wandb
-# finally: 
-#     WANDB_TRACKING = 1
+try:
+    import wandb
+except: 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+    import wandb
+finally: 
+    WANDB_TRACKING = 1
 
 
 def generate_total_sample(num_users, num_items):
@@ -45,7 +45,7 @@ parser.add_argument("--exposure-factor-dim", type=int, default=4)
 parser.add_argument("--exposure-lr", type=float, default=1e-2)
 parser.add_argument("--exposure-weight-decay", type=float, default=1e-4)
 parser.add_argument("--exposure-batch-size", type=int, default=2048)
-parser.add_argument("--exposure_neg_size", type=int, default=2)
+parser.add_argument("--exposure-neg-size", type=int, default=2)
 parser.add_argument("--exposure-num-epochs", type=int, default=100)
 parser.add_argument("--save-weights-interval", type=int, default=10)
 
@@ -55,8 +55,8 @@ parser.add_argument("--lambda-unexposed-user-reg", type=float, default=1.)
 parser.add_argument("--lambda-unexposed-item-reg", type=float, default=1.)
 
 parser.add_argument("--random-seed", type=int, default=0)
-parser.add_argument("--data-dir", type=str, default="../../data")
-parser.add_argument("--dataset-name", type=str, default="coat") # [coat, kuairec, yahoo]
+parser.add_argument("--data-dir", type=str, default="./data")
+parser.add_argument("--dataset-name", type=str, default="ml-1m") # [coat, kuairec, yahoo_r3, ml-1m]
 
 try:
     args = parser.parse_args()

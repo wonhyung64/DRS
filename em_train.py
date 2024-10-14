@@ -15,13 +15,13 @@ from module.model import MF
 from module.metric import ndcg_func, recall_func, ap_func
 from module.utils import binarize
 
-# try:
-#     import wandb
-# except: 
-#     subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
-#     import wandb
-# finally: 
-#     WANDB_TRACKING = 1
+try:
+    import wandb
+except: 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+    import wandb
+finally: 
+    WANDB_TRACKING = 1
 
 
 def generate_total_sample(num_users, num_items):

@@ -10,16 +10,15 @@ import pandas as pd
 from datetime import datetime
 
 from module.model import MF
-from module.metric import ndcg_func, recall_func, ap_func
 from module.utils import binarize
 
-# try:
-#     import wandb
-# except: 
-#     subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
-#     import wandb
-# finally: 
-#     WANDB_TRACKING = 1
+try:
+    import wandb
+except: 
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "wandb"])
+    import wandb
+finally: 
+    WANDB_TRACKING = 1
 
 
 #%% SETTINGS
@@ -32,10 +31,8 @@ parser.add_argument("--preference-batch-size", type=int, default=2048)
 parser.add_argument("--preference-num-epochs", type=int, default=1000)
 
 parser.add_argument("--random-seed", type=int, default=0)
-parser.add_argument("--evaluate-interval", type=int, default=50)
-parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
-parser.add_argument("--data-dir", type=str, default="../../data")
-parser.add_argument("--dataset-name", type=str, default="coat") # [coat, kuairec, yahoo]
+parser.add_argument("--data-dir", type=str, default="./data")
+parser.add_argument("--dataset-name", type=str, default="ml-1m") # [coat, kuairec, yahoo_r3, ml-1m]
 
 try:
     args = parser.parse_args()
@@ -49,8 +46,6 @@ preference_batch_size = args.preference_batch_size
 preference_num_epochs = args.preference_num_epochs
 
 random_seed = args.random_seed
-evaluate_interval = args.evaluate_interval
-top_k_list = args.top_k_list
 data_dir = args.data_dir
 dataset_name = args.dataset_name
 
@@ -62,7 +57,7 @@ else:
     device = "cpu"
 
 expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
-save_dir = f"./weights/expt_{expt_num}"
+save_dir = f"./weights/preference/expt_{expt_num}"
 os.makedirs(f"{save_dir}", exist_ok=True)
 
 config = vars(args)
@@ -184,3 +179,5 @@ for epoch in range(1, preference_num_epochs+1):
             'epoch_preference_loss': float(epoch_preference_loss.item()),
         }
         wandb_var.log(loss_dict)
+
+torch.save(preference_model, f"{save_dir}/e{epoch}.pth")
