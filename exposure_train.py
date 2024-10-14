@@ -63,7 +63,6 @@ try:
 except:
     args = parser.parse_args([])
 
-
 exposure_factor_dim = args.exposure_factor_dim
 exposure_lr = args.exposure_lr
 exposure_weight_decay = args.exposure_weight_decay
@@ -96,7 +95,6 @@ config = vars(args)
 config["device"] = device
 config["expt_num"] = expt_num
 config["save_dir"] = save_dir
-
 
 if WANDB_TRACKING:
     wandb_var = wandb.init(project="drs", config=config)

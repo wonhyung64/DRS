@@ -115,7 +115,6 @@ try:
 except:
     args = parser.parse_args([])
 
-
 exposure_neg_size = args.exposure_neg_size
 
 em_lr = args.em_lr
@@ -137,13 +136,12 @@ else:
 
 expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
 save_dir = f"./weights/expt_{expt_num}"
+os.makedirs(f"{save_dir}", exist_ok=True)
 
 config = vars(args)
 config["device"] = device
 config["expt_num"] = expt_num
 config["save_dir"] = save_dir
-
-os.makedirs(f"{save_dir}", exist_ok=True)
 
 if WANDB_TRACKING:
     wandb_var = wandb.init(project="drs", config=config)

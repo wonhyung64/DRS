@@ -42,7 +42,6 @@ try:
 except:
     args = parser.parse_args([])
 
-
 preference_factor_dim = args.preference_factor_dim
 preference_lr = args.preference_lr
 preference_weight_decay = args.preference_weight_decay
@@ -64,16 +63,12 @@ else:
 
 expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
 save_dir = f"./weights/expt_{expt_num}"
+os.makedirs(f"{save_dir}", exist_ok=True)
 
 config = vars(args)
 config["device"] = device
 config["expt_num"] = expt_num
 config["save_dir"] = save_dir
-
-os.makedirs(f"{save_dir}", exist_ok=True)
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-
 
 if WANDB_TRACKING:
     wandb_var = wandb.init(project="drs", config=config)
@@ -143,11 +138,18 @@ print("# user: {}, # item: {}".format(num_users, num_items))
 print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
 
-#%% TRAIN
+#%% LOAD MODEL
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
+
 preference_model = MF(num_users, num_items, preference_factor_dim)
 preference_model = preference_model.to(device)
 optimizer = torch.optim.Adam(preference_model.parameters(), lr=preference_lr, weight_decay=preference_weight_decay)
 loss_fcn = torch.nn.BCELoss()
+
+#%%
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
 
 all_idx = np.arange(num_sample)
 for epoch in range(1, preference_num_epochs+1):
