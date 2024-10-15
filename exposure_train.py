@@ -216,7 +216,7 @@ np.random.seed(random_seed)
 torch.manual_seed(random_seed)
 
 all_idx = np.arange(num_sample)
-for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
+for epoch in range(1, exposure_num_epochs*total_batch+1):
     np.random.shuffle(all_idx)
     np.random.shuffle(unexposed_pairs)
 
@@ -273,7 +273,7 @@ for epoch in range(1, exposure_num_epochs*num_neg_sample+1):
         }
         wandb_var.log(loss_dict)
 
-    if epoch % (save_weights_interval * num_neg_sample) == 0:
+    if epoch % (save_weights_interval * total_batch) == 0:
         torch.save(exposure_model, f"{save_dir}/e{str(epoch//num_neg_sample).zfill(3)}.pth")
 
 # %%
