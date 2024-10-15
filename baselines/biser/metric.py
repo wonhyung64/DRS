@@ -22,6 +22,8 @@ def biser_ndcg_func(uae, iae, x_test, y_test, train_ui_matrix, train_iu_matrix, 
         pred = pred_matrix.cpu().detach()[uid-1, item_idx]
 
         for top_k in top_k_list:
+            if len(y_u) < top_k:
+                break
             pred_top_k = np.argsort(-pred.numpy())[:top_k]
             log2_iplus1 = np.log2(1+np.arange(1,top_k+1))
             dcg_k = y_u[pred_top_k] / log2_iplus1

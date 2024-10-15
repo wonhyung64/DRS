@@ -30,7 +30,7 @@ parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
 parser.add_argument("--top-k-list", type=list, default=[3,5,7,10])
 parser.add_argument("--data-dir", type=str, default="../../data")
-parser.add_argument("--dataset-name", type=str, default="kuairec")
+parser.add_argument("--dataset-name", type=str, default="ml-1m")
 
 try:
     args = parser.parse_args()
@@ -67,7 +67,7 @@ torch.manual_seed(random_seed)
 
 #%% WANDB
 wandb_var = wandb.init(
-    project="drs",
+    project="recommender",
     config={
         "device" : device,
         "embedding_k" : embedding_k,
@@ -127,7 +127,9 @@ elif dataset_name == "kuairec":
     x_test = x_test[["user_id", "video_id", "interaction"]].to_numpy()
     x_test = np.stack([x_test[:,0]+1, x_test[:,1]+1, x_test[:,2]], axis=-1)
     
-
+elif dataset_name == "ml-1m":
+    x_train = np.load(f"{data_set_dir}/train.npy")
+    x_test = np.load(f"{data_set_dir}/test.npy")
 
 print("===>Load from {} data set<===".format(dataset_name))
 print("[train] num data:", x_train.shape[0])

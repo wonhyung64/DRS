@@ -23,6 +23,8 @@ def ndcg_func(model, x_test, y_test, device, top_k_list):
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:
+            if len(y_u) < top_k:
+                break
             log2_iplus1 = np.log2(1+np.arange(1,top_k+1))
             pred_top_k_rel = y_u[np.argsort(-pred.numpy())][:top_k]
             true_top_k_rel = y_u[np.argsort(-y_u)][:top_k]
@@ -59,6 +61,8 @@ def recall_func(model, x_test, y_test, device, top_k_list):
         total_rel = sum(y_u == 1)
 
         for top_k in top_k_list:
+            if len(y_u) < top_k:
+                break
             pred_top_k_rel = y_u[np.argsort(-pred.numpy())][:top_k]
             recall_k = sum(pred_top_k_rel) / total_rel
 
@@ -89,6 +93,8 @@ def ap_func(model, x_test, y_test, device, top_k_list):
         pred = pred_.flatten().cpu().detach()
 
         for top_k in top_k_list:
+            if len(y_u) < top_k:
+                break
             pred_top_k_rel = y_u[np.argsort(-pred.numpy())][:top_k]
             N = sum(pred_top_k_rel)
             precision_k = np.cumsum(pred_top_k_rel) / np.arange(1, top_k+1)
