@@ -274,6 +274,6 @@ for epoch in range(1, exposure_num_epochs*total_batch+1):
         wandb_var.log(loss_dict)
 
     if epoch % (save_weights_interval * total_batch) == 0:
-        torch.save(exposure_model, f"{save_dir}/e{str(epoch//num_neg_sample).zfill(3)}.pth")
+        torch.save(exposure_model, f"{save_dir}/e{str(epoch//total_batch).zfill(3)}.pth")
 
 # %%
