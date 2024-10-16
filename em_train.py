@@ -94,15 +94,15 @@ def q_y0_o0_fn(x, preference_prob, exposure_prob, posterior):
     return q_y0_o0_r1 + q_y0_o0_r0
 
 
+#%%
 
-#%% SETTINGS
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--exposure_neg_size", type=int, default=1)
 
 parser.add_argument("--em-lr", type=float, default=1e-2)
 parser.add_argument("--em-batch-size", type=int, default=2048)
-parser.add_argument("--em-num-epochs", type=int, default=1000)
+parser.add_argument("--em-num-epochs", type=int, default=50)
 
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--evaluate-interval", type=int, default=50)
@@ -134,21 +134,7 @@ elif torch.backends.mps.is_available():
 else: 
     device = "cpu"
 
-expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
-save_dir = f"./weights/expt_{expt_num}"
-os.makedirs(f"{save_dir}", exist_ok=True)
 
-config = vars(args)
-config["device"] = device
-config["expt_num"] = expt_num
-config["save_dir"] = save_dir
-
-if WANDB_TRACKING:
-    wandb_var = wandb.init(project="recommender", config=config)
-    wandb.run.name = f"em_{expt_num}"
-
-
-#%% OBSERVED DATA LOADER
 data_set_dir = os.path.join(data_dir, dataset_name)
 if dataset_name == "yahoo_r3":
     train_file = os.path.join(data_set_dir, "ydata-ymusic-rating-study-v1_0-train.txt")
@@ -214,7 +200,6 @@ print("# user: {}, # item: {}".format(num_users, num_items))
 print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_train.sum()))
 
 
-# %% UNOBSERVED DATA LOADER
 np.random.seed(random_seed)
 torch.manual_seed(random_seed)
 
@@ -241,102 +226,130 @@ unexposed_pairs = np.concatenate(unexposed_pairs, 0) + 1
 del exposure_matrix, exposure_train, x_all, o_all, zero_indices, unexposed_pairs_all
 
 
-#%% LOAD MODEL 
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
+'''loop setting'''
+exposure_root = "/Users/wonhyung64/Github/DRS/weights/exposure"
+preference_root = "/Users/wonhyung64/Github/DRS/weights/preference"
+for expo_folder in os.listdir(exposure_root):
+    if not len(os.listdir(f"{exposure_root}/{expo_folder}")):
+        continue
+    expo_path = f"{exposure_root}/{expo_folder}/e010.pth"
 
-preference_model = torch.load("/Users/wonhyung64/Github/DRS/preference.pth")
-preference_model = preference_model.to(device)
+    for pref_folder in os.listdir(preference_root):
+        if not len(os.listdir(f"{preference_root}/{pref_folder}")):
+            continue
+        pref_path = f"{preference_root}/{pref_folder}/e1000.pth"
+        '''loop setting'''
 
-exposure_model = torch.load("/Users/wonhyung64/Github/DRS/exposure_pairwise_302409e.pth")
-exposure_model = exposure_model.to(device)
+        expt_num = f'{datetime.now().strftime("%y%m%d_%H%M%S_%f")}'
+        save_dir = f"./weights/expt_{expt_num}"
+        os.makedirs(f"{save_dir}", exist_ok=True)
 
-posterior = Posterior(preference_model, exposure_model)
-posterior = posterior.to(device)
-
-optimizer = torch.optim.Adam(posterior.parameters(), lr=em_lr)
-
-
-#%% EM-algorithm
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-
-num_pos_exposure = len(x_train)
-num_neg_exposure = len(unexposed_pairs)
-total_batch = num_pos_exposure // (em_batch_size//2)
-pos_exposure_idx = np.arange(num_pos_exposure)
-neg_exposure_idx = np.arange(num_neg_exposure)
-
-for epoch in range(1, em_num_epochs+1):
-    np.random.shuffle(pos_exposure_idx)
-    np.random.shuffle(neg_exposure_idx)
-
-    posterior.train()
-    epoch_q_objective = 0.
-
-    for idx in range(total_batch):
-        pos_idx = pos_exposure_idx[(em_batch_size//2)*idx : (idx+1)*(em_batch_size//2)]
-        exposed_x = x_train[pos_idx]
-        exposed_x = torch.LongTensor(exposed_x - 1).to(device)
-        exposed_y_ = y_train[pos_idx]
-        exposed_y_ = np.array([exposed_y_, np.ones_like(exposed_y_)]).T
-        exposed_y = torch.LongTensor(exposed_y_).to(device)
-
-        neg_idx = neg_exposure_idx[(em_batch_size//2)*idx : (idx+1)*(em_batch_size//2)]
-        unexposed_x = unexposed_pairs[neg_idx]
-        unexposed_x = torch.LongTensor(unexposed_x - 1).to(device)
-        unexposed_y = np.zeros_like(exposed_y_)
-        unexposed_y = torch.LongTensor(unexposed_y).to(device)
-
-        sub_x = torch.cat([exposed_x, unexposed_x])
-        sub_y_o = torch.cat([exposed_y, unexposed_y])
-
-        q_objective = -q_objective_fn(sub_x, sub_y_o, posterior)
-
-        optimizer.zero_grad()
-        q_objective.backward()
-        optimizer.step()
-        print(posterior.gamma.item())
-
-        epoch_q_objective += q_objective
-
-    print(f"[Epoch {epoch:>4d} Train Loss] Q-objective: {epoch_q_objective.item():.4f}")
-
-    if WANDB_TRACKING:
-        loss_dict: dict = {
-            'epoch_q_objective': float(epoch_q_objective.item()),
-        }
-        wandb_var.log(loss_dict)
-
-    if epoch % evaluate_interval == 0:
-        posterior.eval()
-
-        ndcg_res = ndcg_func(posterior, x_test, y_test, device, top_k_list)
-        recall_res = recall_func(posterior, x_test, y_test, device, top_k_list)
-        ap_res = ap_func(posterior, x_test, y_test, device, top_k_list)
-
-        ndcg_dict: dict = {}
-        for top_k in top_k_list:
-            ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
-
-        recall_dict: dict = {}
-        for top_k in top_k_list:
-            recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
-
-        ap_dict: dict = {}
-        for top_k in top_k_list:
-            ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
-
-        print(f"NDCG: {ndcg_dict}")
-        print(f"Recall: {recall_dict}")
-        print(f"AP: {ap_dict}")
+        config = vars(args)
+        config["device"] = device
+        config["expt_num"] = expt_num
+        config["save_dir"] = save_dir
+        config["expo_path"] = expo_path
+        config["pref_path"] = pref_path
+        
 
         if WANDB_TRACKING:
-            wandb_var.log(ndcg_dict)
-            wandb_var.log(recall_dict)
-            wandb_var.log(ap_dict)
+            wandb_var = wandb.init(project="recommender", config=config)
+            wandb.run.name = f"em_{expt_num}"
 
-if WANDB_TRACKING:
-    wandb.finish()
 
-# %%
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+        preference_model = torch.load(pref_path)
+        preference_model = preference_model.to(device)
+
+        exposure_model = torch.load(expo_path)
+        exposure_model = exposure_model.to(device)
+
+        posterior = Posterior(preference_model, exposure_model)
+        posterior = posterior.to(device)
+
+        optimizer = torch.optim.Adam(posterior.parameters(), lr=em_lr)
+
+
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+        num_pos_exposure = len(x_train)
+        num_neg_exposure = len(unexposed_pairs)
+        total_batch = num_pos_exposure // (em_batch_size//2)
+        pos_exposure_idx = np.arange(num_pos_exposure)
+        neg_exposure_idx = np.arange(num_neg_exposure)
+
+        for epoch in range(1, em_num_epochs+1):
+            np.random.shuffle(pos_exposure_idx)
+            np.random.shuffle(neg_exposure_idx)
+
+            posterior.train()
+            epoch_q_objective = 0.
+
+            for idx in range(total_batch):
+                pos_idx = pos_exposure_idx[(em_batch_size//2)*idx : (idx+1)*(em_batch_size//2)]
+                exposed_x = x_train[pos_idx]
+                exposed_x = torch.LongTensor(exposed_x - 1).to(device)
+                exposed_y_ = y_train[pos_idx]
+                exposed_y_ = np.array([exposed_y_, np.ones_like(exposed_y_)]).T
+                exposed_y = torch.LongTensor(exposed_y_).to(device)
+
+                neg_idx = neg_exposure_idx[(em_batch_size//2)*idx : (idx+1)*(em_batch_size//2)]
+                unexposed_x = unexposed_pairs[neg_idx]
+                unexposed_x = torch.LongTensor(unexposed_x - 1).to(device)
+                unexposed_y = np.zeros_like(exposed_y_)
+                unexposed_y = torch.LongTensor(unexposed_y).to(device)
+
+                sub_x = torch.cat([exposed_x, unexposed_x])
+                sub_y_o = torch.cat([exposed_y, unexposed_y])
+
+                q_objective = -q_objective_fn(sub_x, sub_y_o, posterior)
+
+                optimizer.zero_grad()
+                q_objective.backward()
+                optimizer.step()
+
+                epoch_q_objective += q_objective
+
+            print(f"[Epoch {epoch:>4d} Train Loss] Q-objective: {epoch_q_objective.item():.4f}")
+
+            if WANDB_TRACKING:
+                loss_dict: dict = {
+                    'epoch_q_objective': float(epoch_q_objective.item()),
+                }
+                wandb_var.log(loss_dict)
+
+            if epoch % evaluate_interval == 0:
+                posterior.eval()
+
+                ndcg_res = ndcg_func(posterior, x_test, y_test, device, top_k_list)
+                recall_res = recall_func(posterior, x_test, y_test, device, top_k_list)
+                ap_res = ap_func(posterior, x_test, y_test, device, top_k_list)
+
+                ndcg_dict: dict = {}
+                for top_k in top_k_list:
+                    ndcg_dict[f"ndcg_{top_k}"] = np.mean(ndcg_res[f"ndcg_{top_k}"])
+
+                recall_dict: dict = {}
+                for top_k in top_k_list:
+                    recall_dict[f"recall_{top_k}"] = np.mean(recall_res[f"recall_{top_k}"])
+
+                ap_dict: dict = {}
+                for top_k in top_k_list:
+                    ap_dict[f"ap_{top_k}"] = np.mean(ap_res[f"ap_{top_k}"])
+
+                print(f"NDCG: {ndcg_dict}")
+                print(f"Recall: {recall_dict}")
+                print(f"AP: {ap_dict}")
+
+                if WANDB_TRACKING:
+                    wandb_var.log(ndcg_dict)
+                    wandb_var.log(recall_dict)
+                    wandb_var.log(ap_dict)
+
+        if WANDB_TRACKING:
+            wandb.finish()
+
+        # %%
