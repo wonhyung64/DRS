@@ -232,7 +232,7 @@ preference_root = "/Users/wonhyung64/Github/DRS/weights/preference"
 for expo_folder in os.listdir(exposure_root):
     if not len(os.listdir(f"{exposure_root}/{expo_folder}")):
         continue
-    expo_path = f"{exposure_root}/{expo_folder}/e010.pth"
+    expo_path = f"{exposure_root}/{expo_folder}/e050.pth"
 
     for pref_folder in os.listdir(preference_root):
         if not len(os.listdir(f"{preference_root}/{pref_folder}")):
@@ -260,10 +260,10 @@ for expo_folder in os.listdir(exposure_root):
         np.random.seed(random_seed)
         torch.manual_seed(random_seed)
 
-        preference_model = torch.load(pref_path)
+        preference_model = torch.load(pref_path, map_location=torch.device(device))
         preference_model = preference_model.to(device)
 
-        exposure_model = torch.load(expo_path)
+        exposure_model = torch.load(expo_path, map_location=torch.device(device))
         exposure_model = exposure_model.to(device)
 
         posterior = Posterior(preference_model, exposure_model)

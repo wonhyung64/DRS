@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-from module.model import MF
+from module.model import MF, NCF
 from module.utils import binarize
 
 try:
@@ -29,6 +29,7 @@ parser.add_argument("--preference-lr", type=float, default=1e-2)
 parser.add_argument("--preference-weight-decay", type=float, default=1e-4)
 parser.add_argument("--preference-batch-size", type=int, default=2048)
 parser.add_argument("--preference-num-epochs", type=int, default=1000)
+parser.add_argument("--preference-base-model", type=str, default="MF")
 
 parser.add_argument("--random-seed", type=int, default=0)
 parser.add_argument("--data-dir", type=str, default="./data")
@@ -44,6 +45,7 @@ preference_lr = args.preference_lr
 preference_weight_decay = args.preference_weight_decay
 preference_batch_size = args.preference_batch_size
 preference_num_epochs = args.preference_num_epochs
+preference_base_model = args.preference_base_model
 
 random_seed = args.random_seed
 data_dir = args.data_dir
@@ -141,7 +143,10 @@ print("# prefer: {}, # not prefer: {}".format(y_train.sum(), num_sample - y_trai
 np.random.seed(random_seed)
 torch.manual_seed(random_seed)
 
-preference_model = MF(num_users, num_items, preference_factor_dim)
+if preference_base_model == "MF":
+    preference_model = MF(num_users, num_items, preference_factor_dim)
+elif preference_base_model == "NCF":
+    preference_model = NCF(num_users, num_items, preference_factor_dim)
 preference_model = preference_model.to(device)
 optimizer = torch.optim.Adam(preference_model.parameters(), lr=preference_lr, weight_decay=preference_weight_decay)
 loss_fcn = torch.nn.BCELoss()
