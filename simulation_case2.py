@@ -2,8 +2,6 @@
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
 
 
 #%% 설정
@@ -14,7 +12,6 @@ N = 10000 # number of samples
 d = 3 # feature dimension
 theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5])  # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수)
-num_epochs = 50000
 
 
 #%% DATA GENERATION (Randomized data)
@@ -41,25 +38,13 @@ p_star_reverse = 1 / (1 + np.exp(-logit_p_star_reverse))
 np.random.seed(criteria_seed)
 y_reverse = np.random.binomial(1, p_star_reverse)
 
-
-#%% True Risk Estimation
-xt = X_with_T
-y_true = y_forward
-
-np.random.seed(criteria_seed)
-true_model = LogisticRegression()
-true_model.fit(xt, y_true)
-y_pred = true_model.predict_proba(xt)[:,0]
-true_risk = log_loss(y_true, y_pred)
+true_cate = y_forward.mean() - y_reverse.mean()
 
 
 #%%
-random_risk_list = []
-real_risk_list = []
-ipw_risk_list = []
-random_coef_list = []
-real_coef_list = []
-ipw_coef_list = []
+random_cate_list = []
+real_cate_list = []
+ipw_cate_list = []
 
 for repeat_seed in tqdm(range(1, repeat_num+1)):
 
@@ -74,17 +59,12 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     random_df['Y'] = y_star
 
     exposed_random_df = random_df[random_df["T"] == 1].reset_index(drop=True)
-    xt = exposed_random_df[["intercept","X1", "X2", "X3", "T"]].to_numpy()
-    y_true = exposed_random_df["Y"].to_numpy()
+    y1 = exposed_random_df["Y"].to_numpy()
+    unexposed_random_df = random_df[random_df["T"] == 0].reset_index(drop=True)
+    y0 = unexposed_random_df["Y"].to_numpy()
 
-    np.random.seed(repeat_seed)
-    random_model = LogisticRegression()
-    random_model.fit(xt, y_true, sample_weight=np.ones_like(y_true)*2.)
-    y_pred = true_model.predict_proba(xt)[:,0]
-    random_risk = log_loss(y_true, y_pred, sample_weight=np.ones_like(y_true)*2.)
-
-    random_coef_list.append(random_model.coef_)
-    random_risk_list.append(random_risk)
+    random_cate = y1.mean() - y0.mean()
+    random_cate_list.append(random_cate)
 
     #partial
     logit_q = x.dot(theta_X_to_T)
@@ -99,46 +79,26 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     real_df['propensity'] = q
 
     exposed_real_df = real_df[real_df["T"] == 1].reset_index(drop=True)
-    xt = exposed_real_df[["intercept", "X1", "X2", "X3", "T"]].to_numpy()
-    y_true = exposed_real_df["Y"].to_numpy()
-    exposed_q = exposed_real_df["propensity"].to_numpy()
+    y1 = exposed_real_df["Y"].to_numpy()
+    q1 = exposed_real_df["propensity"].to_numpy()
 
-    np.random.seed(repeat_seed)
-    real_model = LogisticRegression()
-    real_model.fit(xt, y_true)
-    y_pred = real_model.predict_proba(xt)[:,0]
-    real_risk = log_loss(y_true, y_pred)
+    unexposed_real_df = real_df[real_df["T"] == 0].reset_index(drop=True)
+    y0 = unexposed_real_df["Y"].to_numpy()
+    q0 = 1 - unexposed_real_df["propensity"].to_numpy()
 
-    real_coef_list.append(real_model.coef_)
-    real_risk_list.append(real_risk)
+    real_cate = y1.mean() - y0.mean()
+    real_cate_list.append(real_cate)
 
+    ipw_cate = (y1/q1).sum()/N - (y0/q0).sum()/N
+    ipw_cate_list.append(ipw_cate)
 
-    np.random.seed(repeat_seed)
-    ipw_model = LogisticRegression()
-    ipw_model.fit(xt, y_true, sample_weight=1/(2*exposed_q))
-    y_pred = ipw_model.predict_proba(xt)[:,0]
-    ipw_risk = log_loss(y_true, y_pred, sample_weight=1/(2*exposed_q))
-
-    ipw_coef_list.append(ipw_model.coef_)
-    ipw_risk_list.append(ipw_risk)
-
-random_coef_arr = np.concatenate(random_coef_list, 0)
-real_coef_arr = np.concatenate(real_coef_list, 0)
-ipw_coef_arr = np.concatenate(ipw_coef_list, 0)
 
 
 #%%
-print(f"True Risk : {round(true_risk,4)}")
-print(f"Radnom Risk : {np.array(random_risk_list).mean().round(4)} ± {np.array(random_risk_list).std().round(4)}")
-print(f"Real Risk : {np.array(real_risk_list).mean().round(4)} ± {np.array(real_risk_list).std().round(4)}")
-print(f"IPW  Risk : {np.array(ipw_risk_list).mean().round(4)} ± {np.array(real_risk_list).std().round(4)}")
+print(f"True Risk : {round(true_cate,4)}")
+print(f"Radnom Risk : {np.array(random_cate_list).mean().round(4)} ± {np.array(random_cate_list).std().round(4)}")
+print(f"Real Risk : {np.array(real_cate_list).mean().round(4)} ± {np.array(real_cate_list).std().round(4)}")
+print(f"IPW  Risk : {np.array(ipw_cate_list).mean().round(4)} ± {np.array(ipw_cate_list).std().round(4)}")
 print()
 
-print(f"True Coef : \n{list(true_model.coef_[0].round(4))}\n")
-print(f"Random Coef : \n{[random_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[random_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print(f"Real Coef : \n{[real_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[real_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print(f"IPW Coef : \n{[ipw_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[ipw_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print()
+# %%
