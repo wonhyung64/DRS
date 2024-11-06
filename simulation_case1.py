@@ -12,7 +12,7 @@ repeat_num = 1000
 
 N = 1000000 # number of samples
 d = 3 # feature dimension
-theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5])   # X -> T로 가는 경로의 계수
+theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5]) -1.5  # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수)
 num_epochs = 50000
 
