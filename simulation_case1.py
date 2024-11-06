@@ -44,13 +44,12 @@ y_reverse = np.random.binomial(1, p_star_reverse)
 
 
 #%% True Risk Estimation
-xt = X_with_T
 y_true = y_forward
 
 np.random.seed(criteria_seed)
 true_model = LogisticRegression()
-true_model.fit(xt, y_true)
-y_pred = true_model.predict_proba(xt)[:,0]
+true_model.fit(x, y_true)
+y_pred = true_model.predict_proba(x)[:,0]
 true_risk = log_loss(y_true, y_pred)
 
 
@@ -76,7 +75,7 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     random_df['Y'] = y_star
 
     exposed_random_df = random_df[random_df["T"] == 1].reset_index(drop=True)
-    xt = exposed_random_df[["intercept","X1", "X2", "X3", "T"]].to_numpy()
+    xt = exposed_random_df[["intercept","X1", "X2", "X3"]].to_numpy()
     y_true = exposed_random_df["Y"].to_numpy()
 
     np.random.seed(repeat_seed)
@@ -103,7 +102,7 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     real_df['propensity'] = q
 
     exposed_real_df = real_df[real_df["T"] == 1].reset_index(drop=True)
-    xt = exposed_real_df[["intercept", "X1", "X2", "X3", "T"]].to_numpy()
+    xt = exposed_real_df[["intercept", "X1", "X2", "X3"]].to_numpy()
     y_true = exposed_real_df["Y"].to_numpy()
     exposed_q = exposed_real_df["propensity"].to_numpy()
 
@@ -139,12 +138,12 @@ print(f"IPW  Risk : {(true_risk - np.array(ipw_risk_list)).mean().round(4)} ± {
 print()
 
 print(f"True Coef : \n{list(true_model.coef_[0].round(4))}\n")
-print(f"Random Coef : \n{[(true_model.coef_[0,i] - random_coef_arr[:,i]).mean().round(4) for i in range(d+2)]} mean")
-print(f"{[(true_model.coef_[0,i] - random_coef_arr[:,i]).std().round(4) for i in range(d+2)]} std\n")
-print(f"Real Coef : \n{[(true_model.coef_[0,i] - real_coef_arr[:,i]).mean().round(4) for i in range(d+2)]} mean")
-print(f"{[(true_model.coef_[0,i] - real_coef_arr[:,i]).std().round(4) for i in range(d+2)]} std\n")
-print(f"IPW Coef : \n{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).mean().round(4) for i in range(d+2)]} mean")
-print(f"{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).std().round(4) for i in range(d+2)]} std\n")
+print(f"Random Coef : \n{[(true_model.coef_[0,i] - random_coef_arr[:,i]).mean().round(4) for i in range(d+1)]} mean")
+print(f"{[(true_model.coef_[0,i] - random_coef_arr[:,i]).std().round(4) for i in range(d+1)]} std\n")
+print(f"Real Coef : \n{[(true_model.coef_[0,i] - real_coef_arr[:,i]).mean().round(4) for i in range(d+1)]} mean")
+print(f"{[(true_model.coef_[0,i] - real_coef_arr[:,i]).std().round(4) for i in range(d+1)]} std\n")
+print(f"IPW Coef : \n{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).mean().round(4) for i in range(d+1)]} mean")
+print(f"{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).std().round(4) for i in range(d+1)]} std\n")
 print()
 
 # %%
