@@ -96,9 +96,9 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
 
 #%%
 print(f"True Risk : {round(true_cate,4)}")
-print(f"Radnom Risk : {np.array(random_cate_list).mean().round(4)} ± {np.array(random_cate_list).std().round(4)}")
-print(f"Real Risk : {np.array(real_cate_list).mean().round(4)} ± {np.array(real_cate_list).std().round(4)}")
-print(f"IPW  Risk : {np.array(ipw_cate_list).mean().round(4)} ± {np.array(ipw_cate_list).std().round(4)}")
+print(f"Radnom Risk : {(true_cate - np.array(random_cate_list)).mean().round(4)} ± {(true_cate - np.array(random_cate_list)).std().round(4)}")
+print(f"Real Risk : {(true_cate - np.array(real_cate_list)).mean().round(4)} ± {(true_cate - np.array(real_cate_list)).std().round(4)}")
+print(f"IPW  Risk : {(true_cate - np.array(ipw_cate_list)).mean().round(4)} ± {(true_cate - np.array(ipw_cate_list)).std().round(4)}")
 print()
 
 # %%
