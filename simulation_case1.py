@@ -131,7 +131,7 @@ ipw_coef_arr = np.concatenate(ipw_coef_list, 0)
 print(f"True Risk : {round(true_risk,4)}")
 print(f"Radnom Risk : {np.array(random_risk_list).mean().round(4)} ± {np.array(random_risk_list).std().round(4)}")
 print(f"Real Risk : {np.array(real_risk_list).mean().round(4)} ± {np.array(real_risk_list).std().round(4)}")
-print(f"IPW  Risk : {np.array(ipw_risk_list).mean().round(4)} ± {np.array(real_risk_list).std().round(4)}")
+print(f"IPW  Risk : {np.array(ipw_risk_list).mean().round(4)} ± {np.array(ipw_risk_list).std().round(4)}")
 print()
 
 print(f"True Coef : \n{list(true_model.coef_[0].round(4))}\n")
@@ -147,7 +147,7 @@ print()
 print(f"True Risk : {round(true_risk,4)}")
 print(f"Radnom Risk : {(true_risk - np.array(random_risk_list)).mean().round(4)} ± {(true_risk - np.array(random_risk_list)).std().round(4)}")
 print(f"Real Risk : {(true_risk - np.array(real_risk_list)).mean().round(4)} ± {(true_risk - np.array(real_risk_list)).std().round(4)}")
-print(f"IPW  Risk : {(true_risk - np.array(ipw_risk_list)).mean().round(4)} ± {(true_risk - np.array(real_risk_list)).std().round(4)}")
+print(f"IPW  Risk : {(true_risk - np.array(ipw_risk_list)).mean().round(4)} ± {(true_risk - np.array(ipw_risk_list)).std().round(4)}")
 print()
 
 print(f"True Coef : \n{list(true_model.coef_[0].round(4))}\n")
@@ -158,3 +158,5 @@ print(f"{[(true_model.coef_[0,i] - real_coef_arr[:,i]).std().round(4) for i in r
 print(f"IPW Coef : \n{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).mean().round(4) for i in range(d+2)]} mean")
 print(f"{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).std().round(4) for i in range(d+2)]} std\n")
 print()
+
+# %%
