@@ -10,9 +10,9 @@ from sklearn.metrics import log_loss
 criteria_seed = 0
 repeat_num = 1000
 
-N = 10000 # number of samples
+N = 1000000 # number of samples
 d = 3 # feature dimension
-theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5])  # X -> T로 가는 경로의 계수
+theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5])   # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수)
 num_epochs = 50000
 
@@ -20,7 +20,8 @@ num_epochs = 50000
 #%% DATA GENERATION (Randomized data)
 # 1. 독립 변수 X 생성
 np.random.seed(criteria_seed)
-x = np.random.normal(0, 1, (N, d))  # 평균 0, 표준편차 1의 정규분포
+# x = np.random.normal(0, 1, (N, d))  # 평균 0, 표준편차 1의 정규분포
+x = np.random.uniform(0, 1, (N, d))  # [0,1]  Uniform
 x = np.concatenate([np.ones([N,1]), x], axis=1)
 
 
@@ -60,6 +61,7 @@ ipw_risk_list = []
 random_coef_list = []
 real_coef_list = []
 ipw_coef_list = []
+q_list = []
 
 for repeat_seed in tqdm(range(1, repeat_num+1)):
 
@@ -92,6 +94,8 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     np.random.seed(repeat_seed)
     t = np.random.binomial(1, q)
     y = y_forward * t + y_reverse * (1-t)
+
+    q_list.append(q.mean())
 
     real_df = pd.DataFrame(x, columns=["intercept"]+[f"X{i+1}" for i in range(d)])
     real_df['T'] = t
@@ -129,22 +133,6 @@ ipw_coef_arr = np.concatenate(ipw_coef_list, 0)
 
 #%%
 print(f"True Risk : {round(true_risk,4)}")
-print(f"Radnom Risk : {np.array(random_risk_list).mean().round(4)} ± {np.array(random_risk_list).std().round(4)}")
-print(f"Real Risk : {np.array(real_risk_list).mean().round(4)} ± {np.array(real_risk_list).std().round(4)}")
-print(f"IPW  Risk : {np.array(ipw_risk_list).mean().round(4)} ± {np.array(ipw_risk_list).std().round(4)}")
-print()
-
-print(f"True Coef : \n{list(true_model.coef_[0].round(4))}\n")
-print(f"Random Coef : \n{[random_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[random_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print(f"Real Coef : \n{[real_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[real_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print(f"IPW Coef : \n{[ipw_coef_arr[:,i].mean().round(4) for i in range(d+2)]} mean")
-print(f"{[ipw_coef_arr[:,i].std().round(4) for i in range(d+2)]} std\n")
-print()
-
-#%%
-print(f"True Risk : {round(true_risk,4)}")
 print(f"Radnom Risk : {(true_risk - np.array(random_risk_list)).mean().round(4)} ± {(true_risk - np.array(random_risk_list)).std().round(4)}")
 print(f"Real Risk : {(true_risk - np.array(real_risk_list)).mean().round(4)} ± {(true_risk - np.array(real_risk_list)).std().round(4)}")
 print(f"IPW  Risk : {(true_risk - np.array(ipw_risk_list)).mean().round(4)} ± {(true_risk - np.array(ipw_risk_list)).std().round(4)}")
@@ -159,4 +147,6 @@ print(f"IPW Coef : \n{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).mean().round(
 print(f"{[(true_model.coef_[0,i] - ipw_coef_arr[:,i]).std().round(4) for i in range(d+2)]} std\n")
 print()
 
+# %%
+np.mean(q_list)
 # %%
