@@ -11,7 +11,7 @@ repeat_num = 1000 # 반복실험 횟수
 
 N = 10000 # number of samples
 d = 3 # feature dimension
-theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5])  # X -> T로 가는 경로의 계수
+theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5]) -50.  # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수
 
 
@@ -48,6 +48,7 @@ true_cate = (1 / (1+np.exp(-beta_XT_to_Y[0] - beta_XT_to_Y[-1]))) - (1 / (1+np.e
 random_cate_list = []
 real_cate_list = []
 ipw_cate_list = []
+q_list = []
 
 for repeat_seed in tqdm(range(1, repeat_num+1)):
 
@@ -77,6 +78,8 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     t = np.random.binomial(1, q)
     y = y_forward * t + y_reverse * (1-t)
 
+    q_list.append(q)
+
     real_df = pd.DataFrame(x, columns=[f"X{i+1}" for i in range(d)])
     real_df['T'] = t
     real_df['Y'] = y
@@ -97,6 +100,7 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     ipw_cate_list.append(ipw_cate)
 
 #%%
+print(f"q_bar : {np.mean(q_list).round(4)}\n")
 print(f"  True CATE : {round(true_cate,4)}")
 print(f"Random CATE : {[(np.array(random_cate_list) - true_cate).mean().round(4), np.array(random_cate_list).var().round(4)]}")
 print(f"  Real CATE : {[(np.array(real_cate_list) - true_cate).mean().round(4), np.array(real_cate_list).var().round(4)]}")
