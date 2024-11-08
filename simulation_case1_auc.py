@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss
 
 
 #%% 설정
@@ -13,6 +14,8 @@ N = 1000000 # number of samples
 d = 3 # feature dimension
 theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5]) -3. # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수)
+num_epochs = 50000
+
 
 #%% DATA GENERATION (Randomized data)
 # 1. 독립 변수 X 생성
@@ -133,3 +136,26 @@ print(f"""ipw Coef\n{
     [[(ipw_bias_arr - true_beta[0]).mean().round(4)]+[ipw_bias_arr.var().round(4)]] + 
     [[(ipw_coef_arr[:,i] - true_beta[i+1]).mean().round(4), ipw_coef_arr[:,i].var().round(4)] for i in range(d)]
 }\n""")
+
+
+#%%
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
+
+y_pred_proba = real_model.predict_proba(x_treated)[:, 1]  # 양성 클래스의 확률만 가져옴
+
+# 4. ROC 곡선 및 AUC 계산
+fpr, tpr, thresholds = roc_curve(y_true, y_pred_proba)  # ROC 곡선 데이터
+roc_auc = auc(fpr, tpr)  # AUC 값 계산
+
+# 5. ROC 곡선 그리기
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='blue', label=f'ROC curve (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], color='gray', linestyle='--')  # 대각선 선형 참고선
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve for Logistic Regression')
+plt.legend(loc="lower right")
+plt.show()
