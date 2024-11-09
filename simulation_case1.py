@@ -10,7 +10,7 @@ repeat_num = 1000
 
 N = 1000000 # number of samples
 d = 3 # feature dimension
-theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5]) # X -> T로 가는 경로의 계수
+theta_X_to_T = np.array([2.5, 1.0, -1.5, 0.5]) -3.# X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, 2.0])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수)
 
 
@@ -27,8 +27,8 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     np.random.seed(repeat_seed)
 
     # 1. 독립 변수 X 생성
-    x = np.random.normal(0, 1, (N, d))  # Normal(0,1)
-    # x = np.random.uniform(0, 1, (N, d))  # [0,1]  Uniform
+    # x = np.random.normal(0, 1, (N, d))  # Normal(0,1)
+    x = np.random.uniform(0, 1, (N, d))  # [0,1]  Uniform
     design_x = np.concatenate([np.ones([N,1]), x], axis=1)
 
     # 종속 변수 Y 생성 (X와 T의 영향을 받음)
