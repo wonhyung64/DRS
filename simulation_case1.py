@@ -14,21 +14,21 @@ treatment_effect = 2.0
 theta_X_to_T_ = np.array([2.5, 1.0, -1.5, 0.5])   # X -> T로 가는 경로의 계수
 beta_XT_to_Y = np.array([2.2, 1.5, -2.0, 0.5, treatment_effect])  # X와 T -> Y로 가는 경로의 계수 (마지막은 T의 계수
 
-theta_loc_list1 = [0., 30.,] #normal 10^4
-theta_loc_list2 = [0., 0.32, 1.5] #uniform 10^4
+theta_loc_list1 = [0., 2., 5.,] #normal 10^4
+theta_loc_list2 = [0.32, 0.8, 1.5] #uniform 10^4
 theta_loc_list3 = [0., 0.3, 1.5, 3.] #uniform 10^6
 
 for (x_dist, N ,theta_loc_list) in [
     ("normal", 10000, theta_loc_list1),
     ("uniform", 10000, theta_loc_list2),
-    ("uniform", 1000000, theta_loc_list3),
+    # ("uniform", 1000000, theta_loc_list3),
     ]:
 
     for theta_loc in theta_loc_list:
         print(f"theta_loc : {theta_loc}")
 
         theta_X_to_T = theta_X_to_T_ - theta_loc
-        beta_XT_to_Y = np.array(list(-theta_X_to_T) + [treatment_effect])
+        # beta_XT_to_Y = np.array(list(-theta_X_to_T) + [treatment_effect])
 
         random_bias_list = []
         real_bias_list = []
@@ -58,7 +58,7 @@ for (x_dist, N ,theta_loc_list) in [
             y_forward = np.random.binomial(1, p_star)
 
             X_with_T_reverse = np.hstack((design_x, 1 - dummy))
-            logit_p_star_reverse = X_with_T_reverse.dot(beta_XT_to_Y)
+            logit_p_star_reverse = X_with_T_reverse.dot(beta_XT_to_Y - np.array([4., 0., 0., 0., 0.]))
             p_star_reverse = 1 / (1 + np.exp(-logit_p_star_reverse))
             y_reverse = np.random.binomial(1, p_star_reverse)
 
