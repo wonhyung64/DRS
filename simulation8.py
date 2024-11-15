@@ -7,11 +7,11 @@ from sklearn.linear_model import LogisticRegression
 
 
 #%%
-n = 1000
+n = 100000
 x_values = [1, -1]
 t_coef = np.array([3,2])
-y1_coef = np.array([-1,-2])
-y0_coef = np.array([-1,2])
+y1_coef = np.array([1,-2])
+y0_coef = np.array([1,2])
 covariate_num = len(y1_coef)
 if covariate_num - len(y0_coef):
     raise ValueError("covariate num is different")
@@ -32,7 +32,7 @@ for x in all_x:
 true_ate = (EY1 - EY0) ### TRUE ATE
 
 
-repeat_num = 10000
+repeat_num = 1000
 
 com_ATE_list = []
 gcom_ATE_list = []

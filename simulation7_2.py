@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 
 
 #%%
-n = 1000
+n = 100000
 x_values = [1, -1]
 t_coef = np.array([3])
 y1_coef = np.array([-2])
