@@ -7,8 +7,8 @@ from sklearn.linear_model import LogisticRegression
 
 
 #%%
-n = 100000
-x_values = [1, 0]
+n = 1000
+x_values = [1, -1]
 t_coef = np.array([3])
 y1_coef = np.array([1])
 y0_coef = np.array([1])
@@ -22,7 +22,7 @@ all_x = np.array(list(itertools.product(x_values, repeat=covariate_num)))
 
 # x_i가 [1, -1] 중 하나의 원소일 때 모든 가능한 샘플 생성
 def logistic(x, coef, bias=0.):
-    return 1 / (1 + np.exp(-(x*coef+bias)))
+    return 1 / (1 + np.exp(np.sum(-(x*coef+bias), -1)))
 
 EY1 = 0.
 EY0 = 0.
@@ -40,7 +40,6 @@ gcom_ATE_list = []
 mean_ATE_list = []
 ipw_ATE_list = []
 
-hat_y_coef_list = []
 
 for repeat_seed in tqdm(range(1, repeat_num+1)):
     np.random.seed(repeat_seed)
@@ -48,21 +47,19 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     """DATA GENERATION"""
     sampled_x = np.random.choice([-1, 1], [n,covariate_num])
     prob_t = logistic(sampled_x, t_coef)
-    t = np.random.binomial(1, prob_t)
+    T = np.random.binomial(1, prob_t)
     prob_y1 = logistic(sampled_x, y1_coef, bias)
     prob_y0 = logistic(sampled_x, y0_coef)
-    y1 = np.random.binomial(1, prob_y1)
-    y0 = np.random.binomial(1, prob_y0)
-    y = y1 * t + y0 * (1-t)
+    Y1 = np.random.binomial(1, prob_y1)
+    Y0 = np.random.binomial(1, prob_y0)
+    Y = Y1 * T + Y0 * (1-T)
 
 
     """COM ESTIMATION"""
     model = LogisticRegression(penalty=None, fit_intercept=False)
-    sampled_xt = np.concatenate([sampled_x, t.reshape(-1, 1)], -1)
-    model.fit(sampled_xt, y)
+    sampled_xt = np.concatenate([sampled_x, T.reshape(-1, 1)], -1)
+    model.fit(sampled_xt, Y)
     hat_y_coef = model.coef_
-    
-    hat_y_coef_list.append(hat_y_coef)
     
     hat_EY1, hat_EY0 = 0., 0.
     for x in all_x:
@@ -73,22 +70,19 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
 
 
     """GCOM ESTIMATION"""
-    y1_obs = y[t == 1]
-    x1_obs = sampled_x[t == 1]
+    y1_obs = Y[T == 1]
+    x1_obs = sampled_x[T == 1]
     model1 = LogisticRegression(penalty=None, fit_intercept=True)
     model1.fit(x1_obs, y1_obs)
 
-    y0_obs = y[t == 0]
-    x0_obs = sampled_x[t == 0]
+    y0_obs = Y[T == 0]
+    x0_obs = sampled_x[T == 0]
     model0 = LogisticRegression(penalty=None, fit_intercept=True)
     model0.fit(x0_obs, y0_obs)
     
     hat_y1_coef = model1.coef_
     hat_y0_coef = model0.coef_
     
-    model1.intercept_
-    model0.intercept_
-
     hat_EY1, hat_EY0 = 0., 0.
     for x in all_x:
         hat_EY1 += logistic(x, hat_y1_coef, model1.intercept_)/(2**covariate_num)
@@ -101,8 +95,8 @@ for repeat_seed in tqdm(range(1, repeat_num+1)):
     mean_ATE = y1_obs.mean() - y0_obs.mean()
 
     """IPW CATE"""
-    y1_ps = prob_t[t==1]
-    y0_ps = prob_t[t==0]
+    y1_ps = prob_t[T==1]
+    y0_ps = prob_t[T==0]
     ipw_ATE = (y1_obs/y1_ps).sum()/n - (y0_obs/(1-y0_ps)).sum()/n
 
     
@@ -117,3 +111,5 @@ print((np.array(gcom_ATE_list) - true_ate).mean().round(4), np.var(gcom_ATE_list
 print((np.array(mean_ATE_list) - true_ate).mean().round(4), np.var(mean_ATE_list).round(4))
 print((np.array(ipw_ATE_list) - true_ate).mean().round(4), np.var(ipw_ATE_list).round(4))
 
+
+# %%

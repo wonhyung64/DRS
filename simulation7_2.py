@@ -32,7 +32,7 @@ for x in all_x:
 true_ate = (EY1 - EY0) ### TRUE ATE
 
 
-repeat_num = 10000
+repeat_num = 1000
 
 com_ATE_list = []
 gcom_ATE_list = []
