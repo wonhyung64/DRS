@@ -63,6 +63,13 @@ batch_size = 1024
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
 
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
+    device = "mps"
+else: 
+    device = "cpu"
+
 
 #%%
 for n_samples in n_samples_list:
@@ -124,7 +131,7 @@ for n_samples in n_samples_list:
 
                 """mle simulation"""
                 model = NonLinearMF(n_samples, n_items, n_factors)
-                model = model.to("mps")
+                model = model.to(device)
                 optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
                 for epoch in range(1, num_epochs+1):
@@ -137,9 +144,9 @@ for n_samples in n_samples_list:
                         # mini-batch training
                         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
                         sub_x = x_train[selected_idx]
-                        sub_x = torch.LongTensor(sub_x).to("mps")
+                        sub_x = torch.LongTensor(sub_x).to(device)
                         sub_y = Y_train[selected_idx]
-                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to("mps")
+                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
 
                         pred, user_embed, item_embed = model(sub_x)
 
@@ -154,7 +161,7 @@ for n_samples in n_samples_list:
                     # print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
 
                 model.eval()
-                sub_x = torch.LongTensor(x_test).to("mps")
+                sub_x = torch.LongTensor(x_test).to(device)
                 pred_, _, __ = model(sub_x)
                 pred = nn.Sigmoid()(pred_).detach().cpu().numpy()
 
@@ -164,7 +171,7 @@ for n_samples in n_samples_list:
 
                 """ipw simulation"""
                 model = NonLinearMF(n_samples, n_items, n_factors)
-                model = model.to("mps")
+                model = model.to(device)
                 optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
                 for epoch in range(1, num_epochs+1):
@@ -177,11 +184,11 @@ for n_samples in n_samples_list:
                         # mini-batch training
                         selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
                         sub_x = x_train[selected_idx]
-                        sub_x = torch.LongTensor(sub_x).to("mps")
+                        sub_x = torch.LongTensor(sub_x).to(device)
                         sub_y = Y_train[selected_idx]
-                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to("mps")
+                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
                         sub_ps = ps_train[selected_idx]
-                        sub_ps = torch.Tensor(sub_ps).to("mps")
+                        sub_ps = torch.Tensor(sub_ps).to(device)
 
                         pred, user_embed, item_embed = model(sub_x)
                         rec_loss = ipw(torch.nn.Sigmoid()(pred), sub_y, 1/sub_ps)
@@ -195,7 +202,7 @@ for n_samples in n_samples_list:
                     # print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
 
                 model.eval()
-                sub_x = torch.LongTensor(x_test).to("mps")
+                sub_x = torch.LongTensor(x_test).to(device)
                 pred_, _, __ = model(sub_x)
                 pred = nn.Sigmoid()(pred_).detach().cpu().numpy()
 
