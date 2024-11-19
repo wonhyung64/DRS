@@ -26,9 +26,9 @@ class NonLinearMF(nn.Module):
         item_idx = x[:,1]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        user_embed = self.activation1(self.layer1(user_embed))
-        item_embed = self.activation2(self.layer2(item_embed))
-        out = torch.matmul(user_embed, item_embed.T).unsqueeze(-1)
+        user_scalar = self.activation1(self.layer1(user_embed))
+        item_scalar = self.activation2(self.layer2(item_embed))
+        out = user_scalar * item_scalar
 
         return out, user_embed, item_embed
 
@@ -58,8 +58,8 @@ n_samples_list = [100, 1000]  # Number of samples
 treatment_effect = 1.
 treat_bias = -0.5
 repeat_num = 30
-num_epochs = 1000
-batch_size = 1024
+num_epochs = 500
+batch_size = 512
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
 
@@ -78,7 +78,7 @@ for n_samples in n_samples_list:
 
             mle_auc_list, ipw_auc_list = [], []
             for random_seed in range(1, repeat_num+1):
-                # print(f"Seed {random_seed}")
+                print(f"Seed {random_seed}")
                 np.random.seed(random_seed)
                 torch.manual_seed(random_seed)
 
@@ -188,7 +188,7 @@ for n_samples in n_samples_list:
                         sub_y = Y_train[selected_idx]
                         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
                         sub_ps = ps_train[selected_idx]
-                        sub_ps = torch.Tensor(sub_ps).to(device)
+                        sub_ps = torch.Tensor(sub_ps).unsqueeze(-1).to(device)
 
                         pred, user_embed, item_embed = model(sub_x)
                         rec_loss = ipw(torch.nn.Sigmoid()(pred), sub_y, 1/sub_ps)
@@ -217,3 +217,5 @@ for n_samples in n_samples_list:
             print()
             print(np.mean(ipw_auc_list))
             print(np.std(ipw_auc_list))
+
+# %%
