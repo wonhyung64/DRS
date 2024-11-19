@@ -20,6 +20,7 @@ class NonLinearMF(nn.Module):
         self.activation1 = nn.ReLU()   
         self.layer2 = nn.Linear(self.embedding_k, 1)
         self.activation2 = nn.ReLU()   
+        self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
         user_idx = x[:,0]
@@ -28,7 +29,7 @@ class NonLinearMF(nn.Module):
         item_embed = self.item_embedding(item_idx)
         user_scalar = self.activation1(self.layer1(user_embed))
         item_scalar = self.activation2(self.layer2(item_embed))
-        out = user_scalar * item_scalar
+        out = user_scalar * item_scalar + self.bias
 
         return out, user_embed, item_embed
 
@@ -49,7 +50,6 @@ class NonLinearity(nn.Module):
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
-
 
 #%%
 n_factors_list = [4, 16]     # Number of latent factors
@@ -78,7 +78,7 @@ for n_samples in n_samples_list:
 
             mle_auc_list, ipw_auc_list = [], []
             for random_seed in range(1, repeat_num+1):
-                print(f"Seed {random_seed}")
+                # print(f"Seed {random_seed}")
                 np.random.seed(random_seed)
                 torch.manual_seed(random_seed)
 
