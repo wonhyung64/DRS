@@ -6,23 +6,29 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_curve, auc
 
 
-class MF(nn.Module):
+class NonLinearMF(nn.Module):
     """The neural collaborative filtering method.
     """
     def __init__(self, num_users, num_items, embedding_k):
-        super(MF, self).__init__()
+        super(NonLinearMF, self).__init__()
         self.num_users = num_users
         self.num_items = num_items
         self.embedding_k = embedding_k
         self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
+        self.layer1 = nn.Linear(self.embedding_k, 1)  
+        self.activation1 = nn.ReLU()   
+        self.layer2 = nn.Linear(self.embedding_k, 1)
+        self.activation2 = nn.ReLU()   
 
     def forward(self, x):
         user_idx = x[:,0]
         item_idx = x[:,1]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1)
+        user_embed = self.activation1(self.layer1(user_embed))
+        item_embed = self.activation2(self.layer2(item_embed))
+        out = torch.matmul(user_embed, item_embed.T).unsqueeze(-1)
 
         return out, user_embed, item_embed
 
@@ -117,7 +123,7 @@ for n_samples in n_samples_list:
 
 
                 """mle simulation"""
-                model = MF(n_samples, n_items, n_factors)
+                model = NonLinearMF(n_samples, n_items, n_factors)
                 model = model.to("mps")
                 optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
@@ -157,7 +163,7 @@ for n_samples in n_samples_list:
                 mle_auc_list.append(mle_auc)
 
                 """ipw simulation"""
-                model = MF(n_samples, n_items, n_factors)
+                model = NonLinearMF(n_samples, n_items, n_factors)
                 model = model.to("mps")
                 optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
