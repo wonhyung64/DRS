@@ -55,6 +55,7 @@ treat_bias = -0.5
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
+lr = 1e-2
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
 
@@ -127,7 +128,7 @@ for n_samples in n_samples_list:
                 """mle simulation"""
                 model = MF(n_samples, n_items, n_factors)
                 model = model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
@@ -167,7 +168,7 @@ for n_samples in n_samples_list:
                 """ipw simulation"""
                 model = MF(n_samples, n_items, n_factors)
                 model = model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
