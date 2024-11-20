@@ -38,7 +38,7 @@ treatment_effect = 1.
 treat_bias = -0.5
 repeat_num = 30
 num_epochs = 500
-batch_size = 1024
+batch_size = 512
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
 
