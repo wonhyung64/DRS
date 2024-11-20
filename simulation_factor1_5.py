@@ -16,10 +16,10 @@ class NonLinearMF(nn.Module):
         self.embedding_k = embedding_k
         self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
-        self.layer1 = nn.Linear(self.embedding_k, 1)  
-        self.activation1 = nn.ReLU()   
-        self.layer2 = nn.Linear(self.embedding_k, 1)
-        self.activation2 = nn.ReLU()   
+        self.layer1 = nn.Linear(self.embedding_k, embedding_k)  
+        self.activation1 = nn.Sigmoid()   
+        self.layer2 = nn.Linear(self.embedding_k, embedding_k)
+        self.activation2 = nn.Sigmoid()   
         self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
@@ -27,9 +27,9 @@ class NonLinearMF(nn.Module):
         item_idx = x[:,1]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        user_scalar = self.activation1(self.layer1(user_embed))
-        item_scalar = self.activation2(self.layer2(item_embed))
-        out = user_scalar * item_scalar + self.bias
+        user_embed = self.activation1(self.layer1(user_embed))
+        item_embed = self.activation2(self.layer2(item_embed))
+        out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1) + self.bias
 
         return out, user_embed, item_embed
 
@@ -37,15 +37,15 @@ class NonLinearMF(nn.Module):
 class NonLinearity(nn.Module):
     def __init__(self, n_factors):
         super(NonLinearity, self).__init__()
-        self.layer1 = nn.Linear(n_factors, 1)  
-        self.activation1 = nn.ReLU()   
-        self.layer2 = nn.Linear(n_factors, 1)
-        self.activation2 = nn.ReLU()   
+        self.layer1 = nn.Linear(n_factors, n_factors)  
+        self.activation1 = nn.Sigmoid()   
+        self.layer2 = nn.Linear(n_factors, n_factors)
+        self.activation2 = nn.Sigmoid()   
     
     def forward(self, Lambda_y, Z):
         Lambda_y = self.activation1(self.layer1(Lambda_y))
         Z = self.activation2(self.layer2(Z))
-        return torch.matmul(Lambda_y, Z.T)
+        return Lambda_y, Z
 
 
 def sigmoid(x):
@@ -59,7 +59,7 @@ treatment_effect = 1.
 treat_bias = -0.5
 repeat_num = 30
 num_epochs = 1000
-batch_size = 512
+batch_size = 1024
 lr = 1e-2
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
@@ -101,8 +101,8 @@ for n_samples in n_samples_list:
                 # Step 4: Generate observed variables
                 epsilon_y = np.random.normal(0, 0.1, (n_samples, n_items))  # Noise for treatment
 
-                treated_logit = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z)).detach().numpy()
-                prob_y1 = sigmoid(treated_logit + epsilon_y + treatment_effect)  # Treatment group
+                nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
+                prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
                 prob_y0 = sigmoid(Lambda_y @ Z.T + epsilon_y)  # Control group
                 # print(prob_y1.mean(), prob_y0.std(), prob_y0.mean(), prob_y0.std())
 
