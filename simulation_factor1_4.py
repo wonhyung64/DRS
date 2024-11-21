@@ -16,7 +16,8 @@ class MF(nn.Module):
         self.embedding_k = embedding_k
         self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
-        self.bias = nn.Parameter(torch.zeros(1))
+        # self.bias = nn.Parameter(torch.zeros(1))
+        self.bias = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, x):
         user_idx = x[:,0]
