@@ -20,8 +20,8 @@ class NonLinearMF(nn.Module):
         self.activation1 = nn.Sigmoid()   
         self.layer2 = nn.Linear(self.embedding_k, embedding_k)
         self.activation2 = nn.Sigmoid()   
-        # self.bias = nn.Parameter(torch.zeros(1))
-        self.bias = nn.Parameter(torch.ones(1), requires_grad=False)
+        self.bias = nn.Parameter(torch.zeros(1))
+        # self.bias = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, x):
         user_idx = x[:,0]

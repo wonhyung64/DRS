@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.metrics import roc_curve, auc
 
 
 class MF(nn.Module):
@@ -21,7 +20,6 @@ class MF(nn.Module):
             self.treatment_embedding = nn.Embedding(1, self.embedding_k//2)
         else:
             self.treatment_embedding = nn.Parameter(torch.zeros(1), requires_grad=False)
-        # self.bias = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, x, t=1.):
         user_idx = x[:,0]
@@ -33,35 +31,6 @@ class MF(nn.Module):
         else:
             treatment_embed = self.treatment_embedding(t).sum([-1, -2])
         out = (torch.sum(user_embed.mul(item_embed), -1) + treatment_embed).unsqueeze(-1) + self.bias
-
-        return out, user_embed, item_embed
-
-
-class NonLinearMF(nn.Module):
-    """The neural collaborative filtering method.
-    """
-    def __init__(self, num_users, num_items, embedding_k):
-        super(NonLinearMF, self).__init__()
-        self.num_users = num_users
-        self.num_items = num_items
-        self.embedding_k = embedding_k
-        self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
-        self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
-        self.layer1 = nn.Linear(self.embedding_k, embedding_k)  
-        self.activation1 = nn.Sigmoid()   
-        self.layer2 = nn.Linear(self.embedding_k, embedding_k)
-        self.activation2 = nn.Sigmoid()   
-        self.bias = nn.Parameter(torch.zeros(1))
-        # self.bias = nn.Parameter(torch.ones(1), requires_grad=False)
-
-    def forward(self, x):
-        user_idx = x[:,0]
-        item_idx = x[:,1]
-        user_embed = self.user_embedding(user_idx)
-        item_embed = self.item_embedding(item_idx)
-        user_embed = self.activation1(self.layer1(user_embed))
-        item_embed = self.activation2(self.layer2(item_embed))
-        out = torch.sum(user_embed.mul(item_embed), 1).unsqueeze(-1) + self.bias
 
         return out, user_embed, item_embed
 
@@ -92,14 +61,15 @@ def generate_total_sample(num_users, num_items):
     return np.array(sample)
 
 #%%
-n_factors_list = [4, 16]     # Number of latent factors
 n_items_list = [20, 60]      # Number of observed variables
-n_samples_list = [100, 1000]  # Number of samples
-treatment_effect = 1.
-treat_bias = -0.5
+n_factors_list = [4, 16]     # Number of latent factors
+n_samples_list = [500, 1000, 5000]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
+
+treatment_effect = 1.
+treat_bias = -0.5
 lr = 1e-2
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
@@ -113,16 +83,50 @@ else:
 
 
 #%%
-for n_items in n_items_list:break
+true_ate_dict = {}
+item_result_list = []
+for n_items in n_items_list:
+    if n_items in true_ate_dict.keys():
+        pass
+    else:
+        true_ate_dict[f"{n_items}"] = {}
+
+    factor_result_list = []
     for n_factors in n_factors_list:
+        np.random.seed(0)
+        torch.manual_seed(0)
 
+        # Step 1: Generate latent factors
+        Z = np.random.normal(0, 1, (n_items, n_factors))  # Latent factors
 
+        # Step 2: Define factor loading matrices for treatment and control
+        Lambda_y = np.random.uniform(0., 1., (100000, n_factors))  # Treated group loadings
+        Lambda_t = np.random.uniform(0., 1., (100000, n_factors))
+
+        # Step 3: Generate treatment assignment
+
+        # Step 4: Generate observed variables
+        epsilon_y = np.random.normal(0, 0.1, (100000, n_items))  # Noise for treatment
+
+        nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
+        prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+        prob_y0 = sigmoid(Lambda_y @ Z.T + epsilon_y)  # Control group
+
+        # Step 5: Generate binary outcome
+        Y1 = np.random.binomial(1, prob_y1)
+        Y0 = np.random.binomial(1, prob_y0)
+
+        # TRUE ATE
+        prob_t_rand = np.ones([100000, n_items]) * 1/2
+        T_rand = np.random.binomial(1, prob_t_rand)
+        true_ate = (Y1 * T_rand).mean() - (Y0 * (1-T_rand)).mean()
+        true_ate_dict[f"{n_items}"][f"{n_factors}"] = true_ate
+
+        real_ate_list_n, ipw_ate_list_n, com_ate_list_n, gcom_ate_list_n = [], [], [], []
         for n_samples in n_samples_list:
 
-            true_ate_list = []
             real_ate_list, ipw_ate_list, com_ate_list, gcom_ate_list = [], [], [], []
             for random_seed in range(1, repeat_num+1):
-                # print(f"Seed {random_seed}")
                 np.random.seed(random_seed)
                 torch.manual_seed(random_seed)
 
@@ -150,12 +154,6 @@ for n_items in n_items_list:break
                 Y0 = np.random.binomial(1, prob_y0)
                 Y_real = Y1 * T_real + Y0 * (1-T_real)
 
-                # TRUE ATE
-                prob_t_rand = np.ones([n_samples, n_items]) * 1/2
-                T_rand = np.random.binomial(1, prob_t_rand)
-                true_ate = (Y1 * T_rand).mean() - (Y0 * (1-T_rand)).mean()
-                true_ate_list.append(true_ate)
-
                 real_ate = (Y1 * T_real).mean() - (Y0 * (1-T_real)).mean()
                 real_ate_list.append(real_ate)
 
@@ -167,7 +165,6 @@ for n_items in n_items_list:break
                 t_train = T_real.flatten()
                 num_samples = len(x_train)
                 total_batch = num_samples // batch_size
-
 
                 """com_ate"""
                 model = MF(n_samples, n_items, n_factors, with_t=True)
@@ -251,8 +248,8 @@ for n_items in n_items_list:break
                 total_batch = num_samples // batch_size
 
                 model0 = MF(n_samples, n_items, n_factors, with_t=False)
-                model0 = model1.to(device)
-                optimizer1 = torch.optim.Adam(model0.parameters(), lr=lr)
+                model0 = model0.to(device)
+                optimizer0 = torch.optim.Adam(model0.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
@@ -281,62 +278,31 @@ for n_items in n_items_list:break
                 model0.eval()
                 all_x = torch.LongTensor(x_train).to(device)
                 
-                pred_, _, __ = model(all_x, all_t)
+                pred_, _, __ = model1(all_x)
                 pred_y1 = nn.Sigmoid()(pred_).detach().cpu().numpy()
 
-                pred_, _, __ = model(all_x, all_t)
-                pred_y1 = nn.Sigmoid()(pred_).detach().cpu().numpy()
-                pred_y0 = 1 - pred_y1
-                com_ate = pred_y1.mean() - pred_y0.mean()
-                com_ate_list.append(com_ate)
-                model = NonLinearMF(n_samples, n_items, n_factors)
-                model = model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                pred_, _, __ = model0(all_x)
+                pred_y0 = nn.Sigmoid()(pred_).detach().cpu().numpy()
 
-                for epoch in range(1, num_epochs+1):
-                    all_idx = np.arange(num_samples)
-                    np.random.shuffle(all_idx)
-                    model.train()
+                gcom_ate = pred_y1.mean() - pred_y0.mean()
+                gcom_ate_list.append(gcom_ate)
 
-                    epoch_total_loss = 0.
-                    for idx in range(total_batch):
-                        # mini-batch training
-                        selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
-                        sub_x = x_train[selected_idx]
-                        sub_x = torch.LongTensor(sub_x).to(device)
-                        sub_y = Y_train[selected_idx]
-                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
-                        sub_ps = ps_train[selected_idx]
-                        sub_ps = torch.Tensor(sub_ps).unsqueeze(-1).to(device)
 
-                        pred, user_embed, item_embed = model(sub_x)
-                        rec_loss = ipw(torch.nn.Sigmoid()(pred), sub_y, 1/sub_ps)
-                        total_loss = rec_loss
-                        epoch_total_loss += total_loss
+            real_ate_list_n.append([np.mean(np.array(real_ate_list) - true_ate), np.var(np.array(real_ate_list))])
+            ipw_ate_list_n.append([np.mean(np.array(ipw_ate_list) - true_ate), np.var(np.array(ipw_ate_list))])
+            com_ate_list_n.append([np.mean(np.array(com_ate_list) - true_ate), np.var(np.array(com_ate_list))])
+            gcom_ate_list_n.append([np.mean(np.array(gcom_ate_list) - true_ate), np.var(np.array(gcom_ate_list))])
 
-                        optimizer.zero_grad()
-                        total_loss.backward()
-                        optimizer.step()
 
-                    # print(f"[Epoch {epoch:>4d} Train Loss] rec: {epoch_total_loss.item():.4f}")
+        factor_result = np.concatenate([np.array([real_ate_list_n[i], ipw_ate_list_n[i], com_ate_list_n[i], gcom_ate_list_n[i]]) for i in range(len(n_samples_list))])
+        factor_result_list.append(factor_result)
+    item_result = np.concatenate(factor_result_list, -1)
+    item_result_list.append(item_result)
 
-                model.eval()
-                sub_x = torch.LongTensor(x_test).to(device)
-                pred_, _, __ = model(sub_x)
-                pred = nn.Sigmoid()(pred_).detach().cpu().numpy()
-
-                fpr, tpr, thresholds = roc_curve(Y_test, pred, pos_label=1)
-                ipw_auc = auc(fpr, tpr)
-                ipw_auc_list.append(ipw_auc)
-    
-
-            print(f"{n_samples} users, {n_items} items, {n_factors} factors")
-            print(np.mean(mle_auc_list))
-            print(np.std(mle_auc_list))
-            print()
-            print(np.mean(ipw_auc_list))
-            print(np.std(ipw_auc_list))
+final_result = np.concatenate(item_result_list, -1) 
 
 # %%
+print(true_ate_dict)
 
-# %%
+for i in range(len(final_result)):
+    print(" & ".join([str(j.round(4)) for j in final_result[i]]) + " \\\\")
