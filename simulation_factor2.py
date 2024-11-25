@@ -5,31 +5,48 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class MF(nn.Module):
+class GcomMF(nn.Module):
     """The neural collaborative filtering method.
     """
-    def __init__(self, num_users, num_items, embedding_k, with_t=False):
-        super(MF, self).__init__()
+    def __init__(self, num_users, num_items, embedding_k):
+        super(GcomMF, self).__init__()
         self.num_users = num_users
         self.num_items = num_items
         self.embedding_k = embedding_k
         self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
         self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
         self.bias = nn.Parameter(torch.zeros(1))
-        if with_t:
-            self.treatment_embedding = nn.Embedding(1, self.embedding_k//2)
-        else:
-            self.treatment_embedding = nn.Parameter(torch.zeros(1), requires_grad=False)
 
-    def forward(self, x, t=1.):
+    def forward(self, x):
         user_idx = x[:,0]
         item_idx = x[:,1]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        if type(t) == float:
-            treatment_embed = self.treatment_embedding * t
-        else:
-            treatment_embed = self.treatment_embedding(t).sum([-1, -2])
+        out = (torch.sum(user_embed.mul(item_embed), -1)).unsqueeze(-1) + self.bias
+
+        return out, user_embed, item_embed
+
+
+class ComMF(nn.Module):
+    """The neural collaborative filtering method.
+    """
+    def __init__(self, num_users, num_items, embedding_k):
+        super(ComMF, self).__init__()
+        self.num_users = num_users
+        self.num_items = num_items
+        self.embedding_k = embedding_k
+        self.user_embedding = nn.Embedding(self.num_users, self.embedding_k)
+        self.item_embedding = nn.Embedding(self.num_items, self.embedding_k)
+        self.bias = nn.Parameter(torch.zeros(1))
+        self.treatment_embedding = nn.Embedding(2, self.embedding_k//2)
+
+    def forward(self, x):
+        user_idx = x[:,0]
+        item_idx = x[:,1]
+        t = x[:,2]
+        user_embed = self.user_embedding(user_idx)
+        item_embed = self.item_embedding(item_idx)
+        treatment_embed = self.treatment_embedding(t).sum([-1, -2])
         out = (torch.sum(user_embed.mul(item_embed), -1) + treatment_embed).unsqueeze(-1) + self.bias
 
         return out, user_embed, item_embed
@@ -60,10 +77,12 @@ def generate_total_sample(num_users, num_items):
 
     return np.array(sample)
 
+
 #%%
 n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
 n_samples_list = [500, 1000, 5000]  # Number of samples
+n_samples_list = [100]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
@@ -125,6 +144,8 @@ for n_items in n_items_list:
         real_ate_list_n, ipw_ate_list_n, com_ate_list_n, gcom_ate_list_n = [], [], [], []
         for n_samples in n_samples_list:
 
+            print(n_items, n_factors, n_samples)
+
             real_ate_list, ipw_ate_list, com_ate_list, gcom_ate_list = [], [], [], []
             for random_seed in range(1, repeat_num+1):
                 np.random.seed(random_seed)
@@ -167,7 +188,7 @@ for n_items in n_items_list:
                 total_batch = num_samples // batch_size
 
                 """com_ate"""
-                model = MF(n_samples, n_items, n_factors, with_t=True)
+                model = ComMF(n_samples, n_items, n_factors)
                 model = model.to(device)
                 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
@@ -186,8 +207,9 @@ for n_items in n_items_list:
                         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
                         sub_t = t_train[selected_idx]
                         sub_t = torch.LongTensor(sub_t).unsqueeze(-1).to(device)
+                        sub_xt = torch.concat([sub_x, sub_t], -1)
 
-                        pred, user_embed, item_embed = model(sub_x, sub_t)
+                        pred, user_embed, item_embed = model(sub_xt)
                         rec_loss = mle(torch.nn.Sigmoid()(pred), sub_y)
                         total_loss = rec_loss
                         epoch_total_loss += total_loss
@@ -197,12 +219,14 @@ for n_items in n_items_list:
                         optimizer.step()
 
                 model.eval()
-                all_x = torch.LongTensor(x_train).to(device)
-                all_t1 = torch.ones(all_x.shape[0], dtype=int).unsqueeze(-1).to(device)
+                all_x = torch.LongTensor(x_train)
+                all_t1 = torch.ones(all_x.shape[0], dtype=int).unsqueeze(-1)
+                all_xt1 = torch.concat([all_x, all_t1], -1).to(device)
+                all_xt0 = torch.concat([all_x, 1-all_t1], -1).to(device)
 
-                pred_, _, __ = model(all_x, all_t1)
+                pred_, _, __ = model(all_xt1)
                 pred_y1 = nn.Sigmoid()(pred_).detach().cpu().numpy()
-                pred_, _, __ = model(all_x, 1-all_t1)
+                pred_, _, __ = model(all_xt0)
                 pred_y0 = nn.Sigmoid()(pred_).detach().cpu().numpy()
                 com_ate = pred_y1.mean() - pred_y0.mean()
                 com_ate_list.append(com_ate)
@@ -214,7 +238,7 @@ for n_items in n_items_list:
                 num_samples = len(x_train)
                 total_batch = num_samples // batch_size
 
-                model1 = MF(n_samples, n_items, n_factors, with_t=False)
+                model1 = GcomMF(n_samples, n_items, n_factors)
                 model1 = model1.to(device)
                 optimizer1 = torch.optim.Adam(model1.parameters(), lr=lr)
 
@@ -247,7 +271,7 @@ for n_items in n_items_list:
                 num_samples = len(x_train)
                 total_batch = num_samples // batch_size
 
-                model0 = MF(n_samples, n_items, n_factors, with_t=False)
+                model0 = GcomMF(n_samples, n_items, n_factors)
                 model0 = model0.to(device)
                 optimizer0 = torch.optim.Adam(model0.parameters(), lr=lr)
 
