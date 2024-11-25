@@ -81,8 +81,8 @@ def generate_total_sample(num_users, num_items):
 #%%
 n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
-n_samples_list = [500, 1000, 5000]  # Number of samples
-n_samples_list = [100]  # Number of samples
+# n_samples_list = [500, 1000, 5000]  # Number of samples
+n_samples_list = [500]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
@@ -329,4 +329,4 @@ final_result = np.concatenate(item_result_list, -1)
 print(true_ate_dict)
 
 for i in range(len(final_result)):
-    print(" & ".join([str(j.round(4)) for j in final_result[i]]) + " \\\\")
+    print(" & $".join([str(j.round(4)) for j in final_result[i]]) + "$ \\\\")
