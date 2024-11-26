@@ -261,9 +261,9 @@ for n_items in n_items_list:
                         total_loss = rec_loss
                         epoch_total_loss += total_loss
 
-                        optimizer.zero_grad()
+                        optimizer1.zero_grad()
                         total_loss.backward()
-                        optimizer.step()
+                        optimizer1.step()
 
                 Y_train = Y_real[T_real==0]
                 user_idx, item_idx = np.where(T_real==0)
@@ -294,9 +294,9 @@ for n_items in n_items_list:
                         total_loss = rec_loss
                         epoch_total_loss += total_loss
 
-                        optimizer.zero_grad()
+                        optimizer0.zero_grad()
                         total_loss.backward()
-                        optimizer.step()
+                        optimizer0.step()
 
                 model1.eval()
                 model0.eval()

@@ -82,7 +82,7 @@ def generate_total_sample(num_users, num_items):
 n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
 # n_samples_list = [500, 1000, 5000]  # Number of samples
-n_samples_list = [100, 500]  # Number of samples
+n_samples_list = [100]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
@@ -174,22 +174,22 @@ for n_items in n_items_list:
                 Y1 = np.random.binomial(1, prob_y1)
                 Y0 = np.random.binomial(1, prob_y0)
                 Y_real = Y1 * T_real + Y0 * (1-T_real)
-                
-                x_train = generate_total_sample(n_samples, n_items)
-                Y_train = Y_real.flatten()
-                t_train = T_real.flatten()
+
+                "gcom_ate"
+                Y_train = Y_real[T_real==1]
+                user_idx, item_idx = np.where(T_real==1)
+                x_train = np.concatenate([[user_idx],[item_idx]]).T
                 num_samples = len(x_train)
                 total_batch = num_samples // batch_size
 
-                """com_ate"""
-                model = ComMF(n_samples, n_items, n_factors)
-                model = model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                model1 = GcomMF(n_samples, n_items, n_factors)
+                model1 = model1.to(device)
+                optimizer1 = torch.optim.Adam(model1.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
                     np.random.shuffle(all_idx)
-                    model.train()
+                    model1.train()
 
                     epoch_total_loss = 0.
                     for idx in range(total_batch):
@@ -199,37 +199,67 @@ for n_items in n_items_list:
                         sub_x = torch.LongTensor(sub_x).to(device)
                         sub_y = Y_train[selected_idx]
                         sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
-                        sub_t = t_train[selected_idx]
-                        sub_t = torch.LongTensor(sub_t).unsqueeze(-1).to(device)
-                        sub_xt = torch.concat([sub_x, sub_t], -1)
 
-                        pred, user_embed, item_embed = model(sub_xt)
+                        pred, user_embed, item_embed = model1(sub_x)
                         rec_loss = mle(torch.nn.Sigmoid()(pred), sub_y)
                         total_loss = rec_loss
                         epoch_total_loss += total_loss
 
-                        optimizer.zero_grad()
+                        optimizer1.zero_grad()
                         total_loss.backward()
-                        optimizer.step()
+                        optimizer1.step()
 
-                model.eval()
-                all_x = torch.LongTensor(x_train)
-                all_t1 = torch.ones(all_x.shape[0], dtype=int).unsqueeze(-1)
-                all_xt1 = torch.concat([all_x, all_t1], -1).to(device)
-                all_xt0 = torch.concat([all_x, 1-all_t1], -1).to(device)
+                Y_train = Y_real[T_real==0]
+                user_idx, item_idx = np.where(T_real==0)
+                x_train = np.concatenate([[user_idx],[item_idx]]).T
+                num_samples = len(x_train)
+                total_batch = num_samples // batch_size
 
-                pred_, _, __ = model(all_xt1)
+                model0 = GcomMF(n_samples, n_items, n_factors)
+                model0 = model0.to(device)
+                optimizer0 = torch.optim.Adam(model0.parameters(), lr=lr)
+
+                for epoch in range(1, num_epochs+1):
+                    all_idx = np.arange(num_samples)
+                    np.random.shuffle(all_idx)
+                    model1.train()
+
+                    epoch_total_loss = 0.
+                    for idx in range(total_batch):
+                        # mini-batch training
+                        selected_idx = all_idx[batch_size*idx:(idx+1)*batch_size]
+                        sub_x = x_train[selected_idx]
+                        sub_x = torch.LongTensor(sub_x).to(device)
+                        sub_y = Y_train[selected_idx]
+                        sub_y = torch.Tensor(sub_y).unsqueeze(-1).to(device)
+
+                        pred, user_embed, item_embed = model0(sub_x)
+                        rec_loss = mle(torch.nn.Sigmoid()(pred), sub_y)
+                        total_loss = rec_loss
+                        epoch_total_loss += total_loss
+
+                        optimizer0.zero_grad()
+                        total_loss.backward()
+                        optimizer0.step()
+
+                model1.eval()
+                model0.eval()
+                all_x = torch.LongTensor(x_train).to(device)
+                
+                pred_, _, __ = model1(all_x)
                 pred_y1 = nn.Sigmoid()(pred_).detach().cpu().numpy()
-                pred_, _, __ = model(all_xt0)
+
+                pred_, _, __ = model0(all_x)
                 pred_y0 = nn.Sigmoid()(pred_).detach().cpu().numpy()
-                com_ate = pred_y1.mean() - pred_y0.mean()
-                com_ate_list.append(com_ate)
+
+                gcom_ate = pred_y1.mean() - pred_y0.mean()
+                gcom_ate_list.append(gcom_ate)
 
 
-            com_ate_list_n.append([np.mean(np.array(com_ate_list) - true_ate), np.var(np.array(com_ate_list))])
+            gcom_ate_list_n.append([np.mean(np.array(gcom_ate_list) - true_ate), np.var(np.array(gcom_ate_list))])
 
 
-        factor_result = np.concatenate([np.array([com_ate_list_n[i]]) for i in range(len(n_samples_list))])
+        factor_result = np.concatenate([np.array([gcom_ate_list_n[i]]) for i in range(len(n_samples_list))])
         factor_result_list.append(factor_result)
     item_result = np.concatenate(factor_result_list, -1)
     item_result_list.append(item_result)
