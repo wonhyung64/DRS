@@ -82,7 +82,7 @@ def generate_total_sample(num_users, num_items):
 n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
 # n_samples_list = [500, 1000, 5000]  # Number of samples
-n_samples_list = [500]  # Number of samples
+n_samples_list = [100]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
@@ -119,13 +119,13 @@ for n_items in n_items_list:
         Z = np.random.normal(0, 1, (n_items, n_factors))  # Latent factors
 
         # Step 2: Define factor loading matrices for treatment and control
-        Lambda_y = np.random.uniform(0., 1., (100000, n_factors))  # Treated group loadings
-        Lambda_t = np.random.uniform(0., 1., (100000, n_factors))
+        Lambda_y = np.random.uniform(0., 1., (1000000, n_factors))  # Treated group loadings
+        Lambda_t = np.random.uniform(0., 1., (1000000, n_factors))
 
         # Step 3: Generate treatment assignment
 
         # Step 4: Generate observed variables
-        epsilon_y = np.random.normal(0, 0.1, (100000, n_items))  # Noise for treatment
+        epsilon_y = np.random.normal(0, 0.1, (1000000, n_items))  # Noise for treatment
 
         nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
         prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
@@ -136,9 +136,9 @@ for n_items in n_items_list:
         Y0 = np.random.binomial(1, prob_y0)
 
         # TRUE ATE
-        prob_t_rand = np.ones([100000, n_items]) * 1/2
+        prob_t_rand = np.ones([1000000, n_items]) * 1/2
         T_rand = np.random.binomial(1, prob_t_rand)
-        true_ate = (Y1 * T_rand).mean() - (Y0 * (1-T_rand)).mean()
+        true_ate = Y1[T_rand==1].mean() - Y0[T_rand==0].mean()
         true_ate_dict[f"{n_items}"][f"{n_factors}"] = true_ate
 
         real_ate_list_n, ipw_ate_list_n, com_ate_list_n, gcom_ate_list_n = [], [], [], []
@@ -175,10 +175,10 @@ for n_items in n_items_list:
                 Y0 = np.random.binomial(1, prob_y0)
                 Y_real = Y1 * T_real + Y0 * (1-T_real)
 
-                real_ate = (Y1 * T_real).mean() - (Y0 * (1-T_real)).mean()
+                real_ate = Y1[T_real==1].mean() - Y0[T_real==0].mean()
                 real_ate_list.append(real_ate)
 
-                ipw_ate = (Y_real * T_real / (prob_t_real * T_real + 1e-14)).mean() - (Y_real * (1-T_real) / ((1-prob_t_real) * (1-T_real) + 1e-14)).mean()
+                ipw_ate = ((Y1[T_real==1])/(prob_t_real[T_real==1])).sum()/(n_samples*n_items) - ((Y0[T_real==0])/(1 - prob_t_real[T_real==0])).sum()/(n_samples*n_items)
                 ipw_ate_list.append(ipw_ate)
                 
                 x_train = generate_total_sample(n_samples, n_items)
@@ -327,6 +327,5 @@ final_result = np.concatenate(item_result_list, -1)
 
 # %%
 print(true_ate_dict)
-
 for i in range(len(final_result)):
-    print(" & $".join([str(j.round(4)) for j in final_result[i]]) + "$ \\\\")
+    print(" & ".join([f"${'{:.4f}'.format(j.round(4))}$" for j in final_result[i]]) + " \\\\")
