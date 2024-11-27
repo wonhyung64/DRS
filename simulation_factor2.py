@@ -79,9 +79,10 @@ def generate_total_sample(num_users, num_items):
 
 
 #%%
-n_items_list = [20, 60]      # Number of observed variables
+# n_items_list = [20, 60]      # Number of observed variables
+n_items_list = [100]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
-# n_samples_list = [500, 1000, 5000]  # Number of samples
+# n_samples_list = [100, 500, 1000, 5000]  # Number of samples
 n_samples_list = [100]  # Number of samples
 repeat_num = 30
 num_epochs = 500
@@ -127,8 +128,9 @@ for n_items in n_items_list:
         # Step 4: Generate observed variables
         epsilon_y = np.random.normal(0, 0.1, (1000000, n_items))  # Noise for treatment
 
-        nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
-        prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+        # nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
+        # prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+        prob_y1 = sigmoid(Lambda_y @ Z.T + epsilon_y + treatment_effect)  # easy treatment group
         prob_y0 = sigmoid(Lambda_y @ Z.T + epsilon_y)  # Control group
 
         # Step 5: Generate binary outcome
