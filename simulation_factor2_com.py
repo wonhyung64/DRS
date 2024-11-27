@@ -55,10 +55,10 @@ class ComMF(nn.Module):
 class NonLinearity(nn.Module):
     def __init__(self, n_factors):
         super(NonLinearity, self).__init__()
-        self.layer1 = nn.Linear(n_factors, n_factors)  
-        self.activation1 = nn.Sigmoid()   
+        self.layer1 = nn.Linear(n_factors, n_factors)
+        self.activation1 = nn.Sigmoid()
         self.layer2 = nn.Linear(n_factors, n_factors)
-        self.activation2 = nn.Sigmoid()   
+        self.activation2 = nn.Sigmoid()
     
     def forward(self, Lambda_y, Z):
         Lambda_y = self.activation1(self.layer1(Lambda_y))
@@ -82,10 +82,11 @@ def generate_total_sample(num_users, num_items):
 n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
 # n_samples_list = [500, 1000, 5000]  # Number of samples
-n_samples_list = [100, 500]  # Number of samples
+n_samples_list = [100]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
+embedding_k = 32
 
 treatment_effect = 1.
 treat_bias = -0.5
@@ -127,8 +128,9 @@ for n_items in n_items_list:
         # Step 4: Generate observed variables
         epsilon_y = np.random.normal(0, 0.1, (1000000, n_items))  # Noise for treatment
 
-        nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
-        prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+        # nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
+        # prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+        prob_y1 = sigmoid(Lambda_y @ Z.T + epsilon_y + treatment_effect)  # easy treatment group
         prob_y0 = sigmoid(Lambda_y @ Z.T + epsilon_y)  # Control group
 
         # Step 5: Generate binary outcome
@@ -166,8 +168,9 @@ for n_items in n_items_list:
                 # Step 4: Generate observed variables
                 epsilon_y = np.random.normal(0, 0.1, (n_samples, n_items))  # Noise for treatment
 
-                nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
-                prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+                # nonlinear_Lambda_y, nonlinear_Z = NonLinearity(n_factors)(torch.Tensor(Lambda_y), torch.Tensor(Z))
+                # prob_y1 = sigmoid(nonlinear_Lambda_y.detach().numpy() @ nonlinear_Z.detach().numpy().T + epsilon_y + treatment_effect)  # Treatment group
+                prob_y1 = sigmoid(Lambda_y @ Z.T + epsilon_y + treatment_effect)  # easy treatment group
                 prob_y0 = sigmoid(Lambda_y @ Z.T + epsilon_y)  # Control group
 
                 # Step 5: Generate binary outcome
@@ -182,7 +185,7 @@ for n_items in n_items_list:
                 total_batch = num_samples // batch_size
 
                 """com_ate"""
-                model = ComMF(n_samples, n_items, n_factors)
+                model = ComMF(n_samples, n_items, embedding_k)
                 model = model.to(device)
                 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
