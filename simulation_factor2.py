@@ -46,8 +46,8 @@ class ComMF(nn.Module):
         t = x[:,2]
         user_embed = self.user_embedding(user_idx)
         item_embed = self.item_embedding(item_idx)
-        treatment_embed = self.treatment_embedding(t).sum([-1, -2])
-        out = (torch.sum(user_embed.mul(item_embed), -1) + treatment_embed).unsqueeze(-1) + self.bias
+        treatment_embed = self.treatment_embedding(t).sum(-1)
+        out = (torch.sum(user_embed.mul(item_embed), -1) + treatment_embed + self.bias).unsqueeze(-1)
 
         return out, user_embed, item_embed
 
@@ -79,11 +79,9 @@ def generate_total_sample(num_users, num_items):
 
 
 #%%
-# n_items_list = [20, 60]      # Number of observed variables
-n_items_list = [100]      # Number of observed variables
+n_items_list = [20, 60]      # Number of observed variables
 n_factors_list = [4, 16]     # Number of latent factors
-# n_samples_list = [100, 500, 1000, 5000]  # Number of samples
-n_samples_list = [100]  # Number of samples
+n_samples_list = [100, 500, 1000, 5000]  # Number of samples
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
@@ -146,7 +144,7 @@ for n_items in n_items_list:
         real_ate_list_n, ipw_ate_list_n, com_ate_list_n, gcom_ate_list_n = [], [], [], []
         for n_samples in n_samples_list:
 
-            print(n_items, n_factors, n_samples)
+            print(f"n_items {n_items}, n_factors {n_factors}, n_samples {n_samples}")
 
             real_ate_list, ipw_ate_list, com_ate_list, gcom_ate_list = [], [], [], []
             for random_seed in range(1, repeat_num+1):
