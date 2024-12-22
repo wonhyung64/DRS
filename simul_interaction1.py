@@ -31,14 +31,17 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 #%%
-n_factors_list = [4, 16]
-n_items_list = [20, 40, 60]
+n_factors_list = [4, 8, 16]
+n_items_list = [100]
 n_samples_list = [100, 1000]
 treatment_effect = 1.
 treat_bias = -0.5
+lr = 1e-2
 repeat_num = 30
 num_epochs = 500
 batch_size = 512
+embedding_k = 8
+
 mle = torch.nn.BCELoss()
 ipw = lambda x, y, z: F.binary_cross_entropy(x, y, z)
 
@@ -84,9 +87,9 @@ for n_samples in n_samples_list:
                 x_test = np.concatenate([[user_idx, item_idx]]).T.reshape(-1, 2)
 
                 """mle simulation"""
-                model = MF(n_samples, n_items, n_factors)
+                model = MF(n_samples, n_items, embedding_k)
                 model = model.to("mps")
-                optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
@@ -122,9 +125,9 @@ for n_samples in n_samples_list:
 
 
                 """ipw simulation"""
-                model = MF(n_samples, n_items, n_factors)
+                model = MF(n_samples, n_items, embedding_k)
                 model = model.to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
                 for epoch in range(1, num_epochs+1):
                     all_idx = np.arange(num_samples)
